@@ -209,6 +209,7 @@ struct CloudPetCardView: View {
     }
 
     @ObservedObject private var offload = CardOffload.shared
+    @ObservedObject private var timers = CloudTimers.shared
 
     /// A card being copied, else what the agent is doing right now, else Cloud's suggestion.
     @ViewBuilder private var bottomLine: some View {
@@ -216,6 +217,11 @@ struct CloudPetCardView: View {
             HStack(spacing: 5) {
                 Image(systemName: "sdcard.fill").font(.system(size: 10)).foregroundColor(Color(hex: "#7CC4FF"))
                 Text(status).font(.system(size: 11)).foregroundColor(Color(hex: "#D7DAE0")).lineLimit(2)
+            }
+        } else if let line = timers.nextLine {
+            HStack(spacing: 5) {
+                Image(systemName: "timer").font(.system(size: 10)).foregroundColor(Color(hex: "#FBBF24"))
+                Text(line).font(.system(size: 11).monospacedDigit()).foregroundColor(Color(hex: "#D7DAE0")).lineLimit(2)
             }
         } else if let t = state.tasks.first(where: { [.working, .thinking, .searching].contains($0.state) }) {
             let step = t.steps.indices.contains(t.stepIndex) ? t.steps[t.stepIndex] : "trabalhando…"

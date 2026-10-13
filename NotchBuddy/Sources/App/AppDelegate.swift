@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupIsland()
         #if !APPSTORE
         CloudUpdater.shared.start()   // once a day: new version from GitHub, /ogab, /ojhon
+        _ = CloudTimers.shared        // saved timers and reminders ring even after a restart
         #endif
         #if DEBUG
         let debugMenu = NSMenu(title: "Debug")

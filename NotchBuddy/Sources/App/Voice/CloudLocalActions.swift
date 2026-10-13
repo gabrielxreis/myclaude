@@ -42,6 +42,8 @@ enum CloudLocalActions {
         // A card offload in progress: this is the answer to its question. Or a new offload.
         if CardOffload.shared.awaiting { return ([CardOffload.shared.answer(text)], nil) }
         if CardOffload.isRequest(text) { return ([CardOffload.shared.begin(text)], nil) }
+        if CloudTimers.isRequest(text) { return ([CloudTimers.shared.handle(text)], nil) }
+        if VideoIdea.isRequest(text) { return ([VideoIdea.start(text)], nil) }
         let cls = clauses(text)
         var replies: [String] = []
         var i = skip
