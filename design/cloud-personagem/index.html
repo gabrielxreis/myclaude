@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud: prévia do personagem</title>
+<style>
+  :root { --bg:#0B0C0E; --card:#16171B; --line:#2A2C32; --text:#EDEFF3; --muted:#8E939C; --accent:#7CC4FF; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+  main { max-width:980px; margin:0 auto; padding:28px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 22px; }
+  .stage { display:grid; grid-template-columns: 1fr; gap:16px; }
+  @media (min-width: 820px) { .stage { grid-template-columns: 1.25fr 1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; }
+  canvas { width:100%; height:auto; display:block; border-radius:14px; background:radial-gradient(120% 90% at 50% 30%, #1E2230 0%, #0D0F14 70%); }
+  h2 { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:2px 0 10px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+  button { background:#22252C; color:var(--text); border:1px solid #33363E; border-radius:999px; padding:7px 13px; font:inherit; font-size:13px; cursor:pointer; }
+  button:hover { border-color:#4A4E58; }
+  button.on { background:var(--accent); color:#06121F; border-color:var(--accent); font-weight:600; }
+  .notch { margin-top:14px; display:flex; align-items:center; gap:12px; background:#000; border-radius:0 0 22px 22px; padding:10px 16px; }
+  .notch canvas { width:72px; height:72px; background:none; border-radius:0; }
+  .notch .t b { display:block; font-size:13px; }
+  .notch .t span { color:var(--muted); font-size:12px; }
+  .note { color:var(--muted); font-size:12px; margin-top:10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Cloud: prévia do personagem</h1>
+  <p class="sub">Nuvenzinha no lugar do Mochi, com o mesmo jeito: corpo branco e macio, olhos grandes, bochechas. Toque nas animações e nas skins. Nada muda no app até você aprovar.</p>
+
+  <div class="stage">
+    <div class="card">
+      <canvas id="big" width="720" height="560" aria-label="Cloud animado"></canvas>
+      <div class="notch">
+        <canvas id="small" width="144" height="144" aria-label="Cloud no tamanho do notch"></canvas>
+        <div class="t"><b>Cloud <span id="moodLabel">😊 feliz</span></b><span>Assim ele fica no tamanho do notch</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Animações</h2>
+      <div class="row" id="anims"></div>
+      <h2>Skins</h2>
+      <div class="row" id="skins"></div>
+      <h2>Fases (tamagotchi)</h2>
+      <div class="row" id="stages"></div>
+      <p class="note">Os olhos seguem o mouse quando ele está parado, como no app. Em "ouvindo" ele dá um pulinho e olha para a frente, para a câmera.</p>
+    </div>
+  </div>
+</main>
+
+<script>
+const ANIMS = [
+  ["parado","😊 feliz"],["ouvindo","👂 ouvindo"],["pensando","🤔 pensando"],["falando","💬 falando"],
+  ["feliz","🤩 animado"],["focado","🧐 focado"],["sono","😴 com sono"],["carente","🥺 carente"],
+  ["surpreso","😮 surpreso"],["nivel","⭐ subiu de nível"]
+];
+const SKINS = [["padrao","Padrão"],["cachecol","Cachecol"],["fone","Fone"],["boina","Boina de diretor"],["oculos","Óculos escuros"],["coroa","Coroa"]];
+const STAGES = [["ovo","Ovo"],["filhote","Filhote"],["jovem","Jovem"],["adulto","Adulto"],["mestre","Mestre"]];
+
+let anim = "parado", skin = "padrao", stage = "jovem", animStart = performance.now();
+let mouse = { x: 0, y: 0, active: false };
+let blinkAt = performance.now() + 1800, blinkUntil = 0;
+
+function makeButtons(id, list, get, set) {
+  const el = document.getElementById(id);
+  list.forEach(([key, label]) => {
+    const b = document.createElement("button");
+    b.textContent = label; b.dataset.key = key;
+    b.onclick = () => { set(key); [...el.children].forEach(c => c.classList.toggle("on", c.dataset.key === get())); };
+    if (key === get()) b.classList.add("on");
+    el.appendChild(b);
+  });
+}
+makeButtons("anims", ANIMS.map(([k, l]) => [k, l]), () => anim, k => {
+  anim = k; animStart = performance.now();
+  document.getElementById("moodLabel").textContent = ANIMS.find(a => a[0] === k)[1];
+});
+makeButtons("skins", SKINS, () => skin, k => skin = k);
+makeButtons("stages", STAGES, () => stage, k => { stage = k; animStart = performance.now(); });
+
+const big = document.getElementById("big");
+big.addEventListener("mousemove", e => {
+  const r = big.getBoundingClientRect();
+  mouse.x = ((e.clientX - r.left) / r.width - 0.5) * 2;
+  mouse.y = ((e.clientY - r.top) / r.height - 0.45) * 2;
+  mouse.active = true;
+});
+big.addEventListener("mouseleave", () => mouse.active = false);
+
+const ease = t => 1 - Math.pow(1 - Math.min(Math.max(t, 0), 1), 3);
+const back = t => { const c1 = 1.7, c3 = c1 + 1; t = Math.min(Math.max(t, 0), 1); return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+
+// One frame of Cloud on a canvas, scale = body width in px.
+function draw(ctx, W, H, scale, now, compact) {
+  ctx.clearRect(0, 0, W, H);
+  const t = (now - animStart) / 1000, T = now / 1000;
+  const st = stage, isEgg = st === "ovo";
+  const sizeByStage = { ovo: 0.62, filhote: 0.72, jovem: 0.86, adulto: 1, mestre: 1.04 }[st];
+  const s = scale * sizeByStage;
+
+  // Body motion
+  let ox = 0, oy = 0, sx = 1, sy = 1, tilt = 0;
+  const breathe = Math.sin(T * 2.1) * 0.018;
+  sx += breathe; sy -= breathe;
+  oy += Math.sin(T * 1.3) * 0.02 * s;                       // float
+  let eyeOpen = 1, eyeScale = 1, gx = 0, gy = 0, mouth = "smile", blush = 0.55;
+  if (mouse.active && !compact) { gx = mouse.x * 0.9; gy = mouse.y * 0.7; }
+  else { gx = Math.sin(T * 0.6) * 0.35; gy = Math.sin(T * 0.45) * 0.15; }
+
+  // Blink
+  if (now > blinkAt) { blinkUntil = now + 130; blinkAt = now + 2200 + Math.random() * 2600; }
+  if (now < blinkUntil) eyeOpen = 0.08;
+
+  const fx = [];   // extras drawn on top
+  switch (anim) {
+    case "ouvindo": {
+      const hop = t < 0.45 ? -Math.sin(ease(t / 0.45) * Math.PI) * 0.16 : 0;
+      oy += hop * s; eyeScale = 1.16; gx = 0; gy = 0; mouth = "o";
+      fx.push(["waves", T]); break;
+    }
+    case "pensando": gx = 0.75; gy = -0.75; eyeScale = 0.9; mouth = "flat"; tilt = Math.sin(T * 1.2) * 0.04; fx.push(["dots", T]); break;
+    case "falando": oy += Math.sin(T * Math.PI * 2 * 3.5) * 0.018 * s; mouth = Math.sin(T * 14) > 0 ? "open" : "smile"; gx = 0; gy = 0.1; break;
+    case "feliz": oy -= Math.abs(Math.sin(T * 6)) * 0.07 * s; mouth = "big"; eyeOpen = -1; blush = 0.85; fx.push(["sparkles", T]); break;
+    case "focado": gx = 0.15; gy = 0.55; eyeScale = 0.92; eyeOpen = Math.min(eyeOpen, 0.7); mouth = "flat"; oy += Math.sin(T * 9) * 0.006 * s; fx.push(["gear", T]); break;
+    case "sono": eyeOpen = 0; mouth = "o-small"; sx += Math.sin(T * 1.1) * 0.02; sy -= Math.sin(T * 1.1) * 0.02; fx.push(["zzz", T]); break;
+    case "carente": gx = -0.2; gy = 0.7; eyeScale = 1.22; mouth = "sad"; tilt = -0.07; blush = 0.75; break;
+    case "surpreso": {
+      const j = t < 0.35 ? -Math.sin(ease(t / 0.35) * Math.PI) * 0.22 : 0;
+      oy += j * s; eyeScale = 1.3; mouth = "o"; gx = 0; gy = -0.1; fx.push(["bang", t]); break;
+    }
+    case "nivel": {
+      const spin = t < 0.9 ? back(t / 0.9) : 1;
+      tilt = Math.sin(spin * Math.PI * 2) * 0.12; oy -= (t < 0.9 ? Math.sin(t / 0.9 * Math.PI) * 0.25 : 0) * s;
+      mouth = "big"; eyeOpen = -1; blush = 0.9; fx.push(["levelup", t]); break;
+    }
+  }
+
+  const cx = W / 2 + ox, cy = H * (compact ? 0.56 : 0.56) + oy;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(tilt); ctx.scale(sx, sy);
+
+  // Shadow on the ground
+  ctx.save(); ctx.scale(1, 0.22);
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.beginPath(); ctx.arc(0, (0.62 * s - oy) / 0.22, 0.42 * s * (1 - oy / (2 * s)), 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  if (isEgg) drawEggBack(ctx, s);
+  drawCloudBody(ctx, s);
+  if (skin === "cachecol" && !isEgg) drawScarf(ctx, s, T);
+  drawFace(ctx, s, { eyeOpen, eyeScale, gx, gy, mouth, blush });
+  if (isEgg) drawEggFront(ctx, s);
+  drawSkinTop(ctx, s, skin, st, T);
+  ctx.restore();
+
+  fx.forEach(([kind, v]) => drawFx(ctx, kind, v, cx, cy, s));
+}
+
+// The silhouette: three puffs on top, a soft rounded base. Union of shapes, one fill.
+function cloudPath(ctx, s) {
+  ctx.beginPath();
+  ctx.moveTo(-0.46 * s, 0.30 * s);
+  ctx.bezierCurveTo(-0.66 * s, 0.30 * s, -0.66 * s, -0.04 * s, -0.42 * s, -0.06 * s);   // left puff
+  ctx.bezierCurveTo(-0.44 * s, -0.36 * s, -0.10 * s, -0.42 * s, -0.04 * s, -0.24 * s); // top-left
+  ctx.bezierCurveTo(0.02 * s, -0.50 * s, 0.40 * s, -0.48 * s, 0.38 * s, -0.16 * s);    // top big
+  ctx.bezierCurveTo(0.62 * s, -0.20 * s, 0.70 * s, 0.12 * s, 0.50 * s, 0.22 * s);      // right puff
+  ctx.bezierCurveTo(0.56 * s, 0.40 * s, 0.40 * s, 0.46 * s, 0.30 * s, 0.44 * s);
+  ctx.bezierCurveTo(0.10 * s, 0.50 * s, -0.20 * s, 0.50 * s, -0.36 * s, 0.44 * s);     // soft base
+  ctx.bezierCurveTo(-0.50 * s, 0.42 * s, -0.54 * s, 0.34 * s, -0.46 * s, 0.30 * s);
+  ctx.closePath();
+}
+
+function drawCloudBody(ctx, s) {
+  ctx.save();
+  ctx.shadowColor = "rgba(124,196,255,0.35)"; ctx.shadowBlur = 0.18 * s;
+  cloudPath(ctx, s);
+  const g = ctx.createLinearGradient(0, -0.48 * s, 0, 0.5 * s);
+  g.addColorStop(0, "#FFFFFF"); g.addColorStop(0.65, "#F4F7FC"); g.addColorStop(1, "#DCE5F2");
+  ctx.fillStyle = g; ctx.fill();
+  ctx.restore();
+  // soft rim highlight
+  ctx.save(); cloudPath(ctx, s); ctx.clip();
+  const h = ctx.createRadialGradient(-0.18 * s, -0.30 * s, 0, -0.18 * s, -0.30 * s, 0.5 * s);
+  h.addColorStop(0, "rgba(255,255,255,0.9)"); h.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = h; ctx.fillRect(-s, -s, 2 * s, 2 * s);
+  ctx.restore();
+}
+
+function drawFace(ctx, s, f) {
+  const ex = 0.17 * s, ey = 0.06 * s, gxp = f.gx * 0.05 * s, gyp = f.gy * 0.04 * s;
+  // blush
+  ctx.fillStyle = `rgba(255,140,170,${f.blush})`;
+  [-1, 1].forEach(d => { ctx.beginPath(); ctx.ellipse(d * 0.29 * s + gxp * 0.4, 0.17 * s + gyp * 0.3, 0.065 * s, 0.035 * s, 0, 0, Math.PI * 2); ctx.fill(); });
+  [-1, 1].forEach(d => {
+    const x = d * ex + gxp, y = ey + gyp;
+    if (f.eyeOpen < 0) {           // happy ^ ^
+      ctx.strokeStyle = "#1A1C22"; ctx.lineWidth = 0.035 * s; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.arc(x, y + 0.03 * s, 0.055 * s, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+      return;
+    }
+    const rx = 0.058 * s * f.eyeScale, ry = 0.085 * s * f.eyeScale * Math.max(f.eyeOpen, 0.06);
+    if (f.eyeOpen === 0) {         // asleep: closed lids
+      ctx.strokeStyle = "#1A1C22"; ctx.lineWidth = 0.03 * s; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.arc(x, y - 0.01 * s, 0.05 * s, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+      return;
+    }
+    ctx.fillStyle = "#16181E";
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    if (ry > 0.02 * s) {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.beginPath(); ctx.ellipse(x - rx * 0.32 + f.gx * 0.01 * s, y - ry * 0.42, rx * 0.34, ry * 0.26, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.beginPath(); ctx.arc(x + rx * 0.35, y + ry * 0.38, rx * 0.14, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+  // mouth
+  const mx = gxp * 0.6, my = 0.2 * s + gyp * 0.5;
+  ctx.strokeStyle = "#1A1C22"; ctx.fillStyle = "#3A1E28"; ctx.lineWidth = 0.022 * s; ctx.lineCap = "round";
+  ctx.beginPath();
+  switch (f.mouth) {
+    case "smile": ctx.arc(mx, my - 0.02 * s, 0.035 * s, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke(); break;
+    case "big": ctx.arc(mx, my - 0.025 * s, 0.05 * s, 0, Math.PI); ctx.fill(); break;
+    case "open": ctx.ellipse(mx, my, 0.032 * s, 0.026 * s, 0, 0, Math.PI * 2); ctx.fill(); break;
+    case "o": ctx.ellipse(mx, my, 0.022 * s, 0.026 * s, 0, 0, Math.PI * 2); ctx.fill(); break;
+    case "o-small": ctx.ellipse(mx, my, 0.014 * s, 0.016 * s, 0, 0, Math.PI * 2); ctx.fill(); break;
+    case "flat": ctx.moveTo(mx - 0.028 * s, my); ctx.lineTo(mx + 0.028 * s, my); ctx.stroke(); break;
+    case "sad": ctx.arc(mx, my + 0.03 * s, 0.032 * s, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke(); break;
+  }
+}
+
+function drawScarf(ctx, s, T) {
+  ctx.save();
+  ctx.fillStyle = "#C93A3A";
+  ctx.beginPath();
+  ctx.moveTo(-0.44 * s, 0.30 * s); ctx.quadraticCurveTo(0, 0.42 * s, 0.46 * s, 0.28 * s);
+  ctx.lineTo(0.46 * s, 0.38 * s); ctx.quadraticCurveTo(0, 0.52 * s, -0.44 * s, 0.40 * s); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 0.016 * s;
+  for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(i * 0.12 * s, 0.33 * s + Math.abs(i) * 0.008 * s); ctx.lineTo(i * 0.12 * s + 0.02 * s, 0.45 * s); ctx.stroke(); }
+  const sway = Math.sin(T * 2.2) * 0.02 * s;
+  ctx.fillStyle = "#B83232";
+  ctx.beginPath(); ctx.moveTo(0.18 * s, 0.4 * s); ctx.lineTo(0.28 * s + sway, 0.62 * s); ctx.lineTo(0.18 * s + sway, 0.64 * s); ctx.lineTo(0.1 * s, 0.42 * s); ctx.fill();
+  ctx.restore();
+}
+
+function drawSkinTop(ctx, s, skin, st, T) {
+  if (st === "ovo") return;   // skins come after hatching
+  if (st === "mestre" && skin === "padrao") skin = "coroa";
+  ctx.save();
+  switch (skin) {
+    case "fone": {
+      ctx.strokeStyle = "#2B2F38"; ctx.lineWidth = 0.05 * s; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.arc(0, -0.02 * s, 0.5 * s, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+      ctx.fillStyle = "#2B2F38";
+      [-1, 1].forEach(d => { ctx.beginPath(); ctx.ellipse(d * 0.5 * s, 0.02 * s, 0.07 * s, 0.11 * s, 0, 0, Math.PI * 2); ctx.fill(); });
+      ctx.fillStyle = "#7CC4FF";
+      [-1, 1].forEach(d => { ctx.beginPath(); ctx.ellipse(d * 0.5 * s, 0.02 * s, 0.03 * s, 0.06 * s, 0, 0, Math.PI * 2); ctx.fill(); });
+      break;
+    }
+    case "boina": {
+      ctx.fillStyle = "#1F2128";
+      ctx.beginPath(); ctx.ellipse(0.06 * s, -0.40 * s, 0.3 * s, 0.09 * s, -0.12, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0.04 * s, -0.43 * s, 0.24 * s, 0.1 * s, -0.12, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = "#1F2128"; ctx.fillRect(0.02 * s, -0.56 * s, 0.025 * s, 0.05 * s);
+      break;
+    }
+    case "oculos": {
+      ctx.fillStyle = "rgba(14,16,22,0.94)";
+      [-1, 1].forEach(d => { ctx.beginPath(); ctx.ellipse(d * 0.17 * s, 0.06 * s, 0.1 * s, 0.075 * s, 0, 0, Math.PI * 2); ctx.fill(); });
+      ctx.strokeStyle = "rgba(14,16,22,0.94)"; ctx.lineWidth = 0.02 * s;
+      ctx.beginPath(); ctx.moveTo(-0.08 * s, 0.05 * s); ctx.lineTo(0.08 * s, 0.05 * s); ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      [-1, 1].forEach(d => { ctx.beginPath(); ctx.ellipse(d * 0.17 * s - 0.04 * s, 0.03 * s, 0.03 * s, 0.015 * s, -0.4, 0, Math.PI * 2); ctx.fill(); });
+      break;
+    }
+    case "coroa": {
+      const y = -0.44 * s;
+      ctx.fillStyle = "#F5C542";
+      ctx.beginPath();
+      ctx.moveTo(-0.14 * s, y); ctx.lineTo(-0.16 * s, y - 0.14 * s); ctx.lineTo(-0.07 * s, y - 0.06 * s);
+      ctx.lineTo(0.02 * s, y - 0.17 * s); ctx.lineTo(0.1 * s, y - 0.06 * s); ctx.lineTo(0.19 * s, y - 0.14 * s);
+      ctx.lineTo(0.17 * s, y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#E2554F"; ctx.beginPath(); ctx.arc(0.02 * s, y - 0.04 * s, 0.022 * s, 0, Math.PI * 2); ctx.fill();
+      const glow = 0.5 + Math.sin(T * 3) * 0.5;
+      ctx.fillStyle = `rgba(255,240,180,${0.35 * glow})`; ctx.beginPath(); ctx.arc(0.02 * s, y - 0.1 * s, 0.12 * s, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+// Egg stage: shell halves around a small Cloud.
+function drawEggBack(ctx, s) {
+  ctx.fillStyle = "#F3E9D8";
+  ctx.beginPath(); ctx.ellipse(0, 0.30 * s, 0.62 * s, 0.6 * s, 0, Math.PI, 0); ctx.fill();
+}
+function drawEggFront(ctx, s) {
+  // The shell's cracked rim sits under the eyes: Cloud peeks out of it.
+  const top = 0.28;
+  ctx.fillStyle = "#F6EEDF"; ctx.strokeStyle = "#D9CBB2"; ctx.lineWidth = 0.02 * s;
+  ctx.beginPath();
+  const zig = [-0.62, -0.46, -0.3, -0.14, 0.02, 0.18, 0.34, 0.5, 0.62];
+  zig.forEach((x, i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, x * s, (top + (i % 2 ? -0.07 : 0.02)) * s));
+  ctx.ellipse(0, top * s, 0.62 * s, 0.42 * s, 0, 0, Math.PI);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "rgba(124,196,255,0.5)";
+  [[-0.3, 0.48], [0.2, 0.56], [0.38, 0.4]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x * s, y * s, 0.035 * s, 0, Math.PI * 2); ctx.fill(); });
+}
+
+function drawFx(ctx, kind, v, cx, cy, s) {
+  ctx.save(); ctx.translate(cx, cy);
+  switch (kind) {
+    case "waves":
+      for (let i = 0; i < 3; i++) {
+        const p = ((v * 1.4 + i / 3) % 1);
+        ctx.strokeStyle = `rgba(124,196,255,${0.7 * (1 - p)})`; ctx.lineWidth = 0.018 * s;
+        [-1, 1].forEach(d => { ctx.beginPath(); ctx.arc(d * 0.6 * s, -0.02 * s, (0.08 + p * 0.18) * s, d < 0 ? Math.PI * 0.7 : -Math.PI * 0.3, d < 0 ? Math.PI * 1.3 : Math.PI * 0.3); ctx.stroke(); });
+      }
+      break;
+    case "dots":
+      for (let i = 0; i < 3; i++) {
+        const a = 0.35 + 0.65 * Math.max(0, Math.sin(v * 4 - i * 0.7));
+        ctx.fillStyle = `rgba(255,255,255,${a})`;
+        ctx.beginPath(); ctx.arc((0.36 + i * 0.1) * s, (-0.56 - i * 0.07) * s, (0.025 + i * 0.008) * s, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    case "sparkles":
+      for (let i = 0; i < 5; i++) {
+        const ang = i / 5 * Math.PI * 2 + v, r = (0.62 + Math.sin(v * 3 + i) * 0.05) * s;
+        const a = 0.5 + 0.5 * Math.sin(v * 5 + i * 1.3);
+        star(ctx, Math.cos(ang) * r, Math.sin(ang) * r * 0.7 - 0.1 * s, 0.035 * s, `rgba(255,224,130,${a})`);
+      }
+      break;
+    case "gear": {
+      ctx.translate(0.48 * s, -0.46 * s); ctx.rotate(v * 2);
+      ctx.fillStyle = "rgba(124,196,255,0.85)";
+      for (let i = 0; i < 8; i++) { ctx.rotate(Math.PI / 4); ctx.fillRect(-0.012 * s, -0.075 * s, 0.024 * s, 0.03 * s); }
+      ctx.beginPath(); ctx.arc(0, 0, 0.05 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#0D0F14"; ctx.beginPath(); ctx.arc(0, 0, 0.02 * s, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case "zzz":
+      ctx.fillStyle = "rgba(200,220,255,0.9)"; ctx.font = `600 ${0.1 * s}px -apple-system, sans-serif`;
+      for (let i = 0; i < 3; i++) {
+        const p = ((v * 0.5 + i / 3) % 1);
+        ctx.globalAlpha = 1 - p; ctx.font = `600 ${(0.07 + p * 0.07) * s}px -apple-system, sans-serif`;
+        ctx.fillText("z", (0.38 + p * 0.2) * s, (-0.4 - p * 0.35) * s);
+      }
+      break;
+    case "bang":
+      if (v < 1.2) { ctx.globalAlpha = Math.max(0, 1 - v / 1.2); ctx.fillStyle = "#FFD15C"; ctx.font = `800 ${0.18 * s}px -apple-system, sans-serif`; ctx.fillText("!", 0.42 * s, -0.5 * s); }
+      break;
+    case "levelup":
+      for (let i = 0; i < 14; i++) {
+        const ang = i / 14 * Math.PI * 2, p = Math.min(v / 1.2, 1);
+        ctx.globalAlpha = 1 - p;
+        star(ctx, Math.cos(ang) * p * 0.8 * s, Math.sin(ang) * p * 0.7 * s - 0.1 * s, 0.04 * s, "#FFE082");
+      }
+      ctx.globalAlpha = Math.min(1, v * 2) * (v < 2.4 ? 1 : Math.max(0, 1 - (v - 2.4)));
+      ctx.fillStyle = "#FFE082"; ctx.font = `700 ${0.09 * s}px -apple-system, sans-serif`; ctx.textAlign = "center";
+      ctx.fillText("Nível 4!", 0, -0.66 * s);
+      break;
+  }
+  ctx.restore();
+}
+function star(ctx, x, y, r, color) {
+  ctx.fillStyle = color; ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, rr = i % 2 ? r * 0.38 : r; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  ctx.closePath(); ctx.fill();
+}
+
+const bctx = big.getContext("2d"), sm = document.getElementById("small"), sctx = sm.getContext("2d");
+function loop(now) {
+  draw(bctx, big.width, big.height, 420, now, false);
+  draw(sctx, sm.width, sm.height, 96, now, true);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

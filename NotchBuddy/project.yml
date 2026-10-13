@@ -1,0 +1,147 @@
+name: NotchBuddy
+options:
+  bundleIdPrefix: com.gabrielreis
+  deploymentTarget:
+    macOS: "15.0"
+  xcodeVersion: "27.0"
+  createIntermediateGroups: true
+
+# DebugCloud = Debug, but signed with iCloud (CloudKit) and push entitlements
+# and compiled with PHONE_LINK, for the iPhone link spike. ReleaseCloud = the
+# same for a Developer ID build with its provisioning profile
+# (scripts/cloud-test-build.sh); a Developer ID profile only allows the
+# Production CloudKit environment, so the iPhone joins it with the
+# CoucouPhoneProduction scheme. Release also compiles PHONE_LINK (the sync
+# stays off until turned on in Settings); Debug stays unsigned without it.
+configs:
+  Debug: debug
+  DebugCloud: debug
+  Release: release
+  ReleaseCloud: release
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Manual
+    OTHER_SWIFT_FLAGS: "-strict-concurrency=complete"
+    # Prevent Xcode from scanning Swift source and rewriting Localizable.xcstrings.
+    SWIFT_EMIT_LOC_STRINGS: NO
+  configs:
+    Debug:
+      CODE_SIGNING_REQUIRED: NO
+      CODE_SIGNING_ALLOWED: NO
+      # One binary, no "My Cloud.debug.dylib": scripts/build-mycloud.sh re-signs the app.
+      ENABLE_DEBUG_DYLIB: NO
+    DebugCloud:
+      CODE_SIGNING_REQUIRED: YES
+      CODE_SIGNING_ALLOWED: YES
+      CODE_SIGN_STYLE: Automatic
+      CODE_SIGN_IDENTITY: "Apple Development"
+      DEVELOPMENT_TEAM: 256AUJ9555
+    Release:
+      CODE_SIGNING_REQUIRED: YES
+      CODE_SIGNING_ALLOWED: YES
+      CODE_SIGN_IDENTITY: "Developer ID Application"
+      DEVELOPMENT_TEAM: 256AUJ9555
+      OTHER_CODE_SIGN_FLAGS: "--timestamp"
+      CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+      CODE_SIGN_ENTITLEMENTS: Resources/Coucou.entitlements
+    ReleaseCloud:
+      CODE_SIGNING_REQUIRED: YES
+      CODE_SIGNING_ALLOWED: YES
+      CODE_SIGN_IDENTITY: "Developer ID Application"
+      DEVELOPMENT_TEAM: 256AUJ9555
+      OTHER_CODE_SIGN_FLAGS: "--timestamp"
+      CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+
+schemes:
+  NotchBuddy:
+    build:
+      targets:
+        NotchBuddy: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+targets:
+  NotchBuddy:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+        type: group
+        excludes:
+          - "Phone/**"
+          - "Widgets/**"
+          - "NotificationContent/**"
+      - path: Assets.xcassets
+        buildPhase: resources
+      - path: Resources/cloud-sounds
+        buildPhase: resources
+        type: folder
+      - path: Resources/Localizable.xcstrings
+        buildPhase: resources
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleName: My Cloud
+        CFBundleDisplayName: My Cloud
+        CFBundleIdentifier: com.gabrielreis.mycloud
+        CFBundleVersion: "15"
+        CFBundleShortVersionString: "0.3.0"
+        CFBundlePackageType: APPL
+        LSUIElement: YES
+        NSHighResolutionCapable: YES
+        NSSupportsAutomaticGraphicsSwitching: YES
+        NSAppleEventsUsageDescription: "Pour sauter au terminal, envoyer des mails et piloter Musique et Spotify."
+        NSMicrophoneUsageDescription: "O Cloud usa o microfone para ouvir quando você chama \"Ei Cloud\"."
+        NSSpeechRecognitionUsageDescription: "O Cloud transforma sua voz em texto no próprio Mac para entender seus comandos."
+        NSAccessibilityUsageDescription: "Pour lire le titre de la fenêtre active et l'attacher comme contexte."
+        NSContactsUsageDescription: "O Cloud procura um e-mail nos seus contatos quando você pede, por voz, para preparar uma mensagem."
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        CFBundleLocalizations:
+          - en
+          - ar
+          - bn
+          - es
+          - fr
+          - hi
+          - id
+          - pt-BR
+          - ru
+          - zh-Hans
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gabrielreis.mycloud
+        PRODUCT_NAME: My Cloud
+        PRODUCT_MODULE_NAME: Coucou
+        INFOPLIST_FILE: Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        ENABLE_SANDBOX: NO
+      configs:
+        DebugCloud:
+          CODE_SIGN_ENTITLEMENTS: Resources/CoucouCloud.entitlements
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG PHONE_LINK"
+          # The build run every day from Xcode: optimized like Release, so Mochi's
+          # drawing costs what it costs for users (unoptimized Swift was ~2× the CPU).
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+        # The distributed build carries the iPhone sync (off until the user
+        # turns it on in Settings), so it needs iCloud and its Developer ID profile.
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Resources/CoucouReleaseCloud.entitlements
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: PHONE_LINK
+          PROVISIONING_PROFILE_SPECIFIER: "Coucou Developer ID"
+        ReleaseCloud:
+          CODE_SIGN_ENTITLEMENTS: Resources/CoucouReleaseCloud.entitlements
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: PHONE_LINK
+          PROVISIONING_PROFILE_SPECIFIER: "Coucou Developer ID"
+    postBuildScripts:
+      - name: "Write Git Hash to Info.plist"
+        script: |
+          HASH=$(git -C "${SRCROOT}/.." rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          /usr/libexec/PlistBuddy -c "Set :CoucouGitHash ${HASH}" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CoucouGitHash string ${HASH}" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+        showEnvVars: false
