@@ -148,6 +148,8 @@ Depois, no próprio app (ícone na barra de menu → Ajustes):
 * **Agentes:** "Instalar hooks" do Claude Code, para o Cloud ver as suas sessões.
 * **ChatGPT (opcional):** `brew install --cask codex` e `codex login` com a sua conta.
 
+**Atualização automática.** Uma vez por dia o My Cloud confere este repositório: se tiver versão nova, ele baixa, compila em segundo plano, troca a versão em Aplicativos e avisa. A /ogab e a /ojhon são atualizadas junto. Dá para desligar ou verificar na hora em **Ajustes → Geral → Atualizações**.
+
 **Requisitos:** macOS 15 ou mais novo, Xcode (para compilar), assinatura do Claude (Pro ou Max). Para o cartão de memória com proxies e transcrição: ffmpeg e Whisper local, que a /ogab instala.
 
 <a id="configuracao"></a>

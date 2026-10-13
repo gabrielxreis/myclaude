@@ -276,6 +276,25 @@ struct SettingsView: View {
 
     @ViewBuilder private var generalSection: some View {
         #if !APPSTORE
+        GroupBox("Atualizações") {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Atualizar sozinho todo dia (app, /ogab e /ojhon)", isOn: $autoUpdate)
+                    .onChange(of: autoUpdate) { _, v in CloudUpdater.enabled = v }
+                HStack(spacing: 10) {
+                    Button("Verificar agora") { Task { await CloudUpdater.shared.check(manual: true) } }
+                        .buttonStyle(.bordered)
+                    Text(updater.status.isEmpty
+                         ? (CloudUpdater.lastCheck.map { "Última verificação: " + $0.formatted(.relative(presentation: .named).locale(Locale(identifier: "pt_BR"))) } ?? "")
+                         : updater.status)
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                Text("Versão desta build: " + (CloudUpdater.buildDate?.formatted(date: .abbreviated, time: .shortened) ?? "sem data") + ". As versões novas vêm de github.com/gabrielxreis/myclaude e são compiladas no seu Mac (precisa do Xcode).")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(6)
+        }
+
         GroupBox("Personagem") {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
@@ -1532,6 +1551,8 @@ struct SettingsView: View {
     @AppStorage("cloudSkin") private var skinRaw: String = "auto"
     @AppStorage("cloudListenSounds") private var listenSounds: Bool = true
     @State private var weatherCity: String = CloudWeather.city
+    @State private var autoUpdate: Bool = CloudUpdater.enabled
+    @ObservedObject private var updater = CloudUpdater.shared
     @State private var allowedRulesText: String = VoiceSettings.allowedRulesText
     @AppStorage("cloudQuestionsProvider") private var questionsProvider: String = "chatgpt"
     @State private var micUID: String = AudioInputDevices.selectedUID

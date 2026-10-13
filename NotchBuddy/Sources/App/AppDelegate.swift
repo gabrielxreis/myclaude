@@ -20,6 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         setupMenuBarItem()
         setupIsland()
+        #if !APPSTORE
+        CloudUpdater.shared.start()   // once a day: new version from GitHub, /ogab, /ojhon
+        #endif
         #if DEBUG
         let debugMenu = NSMenu(title: "Debug")
         debugMenu.addItem(NSMenuItem(title: "Render recap image", action: #selector(renderRecapImage), keyEquivalent: ""))

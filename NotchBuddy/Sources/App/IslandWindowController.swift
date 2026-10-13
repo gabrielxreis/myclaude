@@ -363,6 +363,13 @@ final class IslandWindowController: NSWindowController {
                 }
                 return
             }
+            if phrase == "/atualizar" {   // "Verificar agora"
+                Task { @MainActor in
+                    await CloudUpdater.shared.check(manual: true)
+                    appendAppLog("nb.log", "[Cloud] update check: \(CloudUpdater.shared.status)")
+                }
+                return
+            }
             if phrase == "/chat" {   // same as tapping the caption
                 Task { @MainActor in CloudChatWindow.shared.show(conversation: CloudChatStore.shared.voiceConversationId) }
                 return

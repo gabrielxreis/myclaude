@@ -6,7 +6,13 @@
 set -e
 cd "$(dirname "$0")/../NotchBuddy"
 APP="build/Build/Products/Debug/My Cloud.app"
-IDENTITY="${MYCLOUD_SIGN_IDENTITY:-FrameZero Dev}"
+# A stable identity keeps the Mac's permissions between versions: the one asked for, else the
+# first code-signing identity in the keychain, else an ad-hoc signature (works, may re-ask).
+IDENTITY="${MYCLOUD_SIGN_IDENTITY:-}"
+if [ -z "$IDENTITY" ]; then
+  IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/"/{print $2; exit}')
+  [ -n "$IDENTITY" ] || IDENTITY="-"
+fi
 
 pkill -f "My Cloud.app/Contents/MacOS" 2>/dev/null || true
 rm -rf "$APP"
@@ -17,6 +23,10 @@ EXTRA=('SWIFT_ACTIVE_COMPILATION_CONDITIONS=MYCLOUD_PUBLIC')
 xcodebuild -scheme NotchBuddy -configuration Debug -derivedDataPath build build "${EXTRA[@]}" 2>&1 \
   | grep -E " error:|BUILD (SUCCEEDED|FAILED)"
 [ -d "$APP" ] || { echo "build falhou"; exit 1; }
+
+# Build date: the auto-update compares it with the newest version on GitHub.
+/usr/libexec/PlistBuddy -c "Add :MyCloudBuildDate string $(date -u +%Y-%m-%dT%H:%M:%SZ)" "$APP/Contents/Info.plist" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Set :MyCloudBuildDate $(date -u +%Y-%m-%dT%H:%M:%SZ)" "$APP/Contents/Info.plist"
 
 # Public build: Coucou's sounds stay out of the bundle (My Cloud's own are in cloud-sounds).
 rm -rf "$APP/Contents/Resources/sounds"
