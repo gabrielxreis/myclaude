@@ -22,8 +22,10 @@ final class ClaudeCLIBrain {
 
     /// The one file Cloud may write: its own quick actions.
     static var quickActionTools: [String] {
-        let p = CloudQuickActions.permissionPath
-        return ["Edit(\(p))", "Write(\(p))"]
+        ["acoes-rapidas.json", "rotinas.json", "gatilhos.json"].flatMap { f -> [String] in
+            let p = "~/Library/Application Support/MyCloud/" + f
+            return ["Edit(\(p))", "Write(\(p))"]
+        }
     }
 
     /// A GUI app doesn't get the shell's PATH: look where the installers put `claude`.
@@ -76,13 +78,14 @@ final class ClaudeCLIBrain {
     struct Answer { let text: String; let sessionId: String? }
 
     /// Asks Claude, resuming `sessionId` when given. nil on failure (logged).
-    static func ask(_ prompt: String, sessionId: String?, voice: Bool) async -> Answer? {
+    static func ask(_ prompt: String, sessionId: String?, voice: Bool, model: String? = nil,
+                    timeout: TimeInterval? = nil) async -> Answer? {
         guard let exe = executable else { return nil }
         let mode = VoiceSettings.executionMode
         var args = ["-p", prompt,
                     "--output-format", "json",
                     "--append-system-prompt", systemPrompt(voice: voice, mode: mode)]
-        if voice { args += ["--model", voiceModel] }
+        if let m = model ?? (voice ? voiceModel : nil) { args += ["--model", m] }
         if let sessionId { args += ["--resume", sessionId] }
         // Settings → Voz → "O que o Cloud pode fazer". The variadic --allowedTools goes last:
         // each rule is its own argument (rules may contain spaces).
@@ -92,11 +95,11 @@ final class ClaudeCLIBrain {
         case "consultar":
             args += ["--allowedTools"] + allowedTools + quickActionTools
         default:
-            args += ["--allowedTools"] + VoiceSettings.allowedRules
+            args += ["--allowedTools"] + VoiceSettings.allowedRules + quickActionTools
         }
 
         let acting = mode != "consultar"
-        guard let data = await run(exe, args, timeout: voice ? (acting ? 300 : 90) : 1800),
+        guard let data = await run(exe, args, timeout: timeout ?? (voice ? (acting ? 300 : 90) : 1800)),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             appendAppLog("nb.log", "[Cloud] claude -p gave no JSON")
             return nil
@@ -173,11 +176,15 @@ final class ClaudeCLIBrain {
         let today = Date().formatted(.dateTime.weekday(.wide).day().month(.wide).year().hour().minute()
             .locale(Locale(identifier: "pt_BR")))
         let common = """
-        Você é o Cloud, o assistente que mora no notch do Mac do usuário, tipo Jarvis: \
+        Você é o \(CloudIdentity.name), o assistente (o app se chama My Cloud) que mora no notch do Mac do usuário, tipo Jarvis: \
         rápido, caloroso, um pouco brincalhão. Agora é \(today). Responda em português do Brasil, \
         sem travessão.
         \(modeRules(mode))
         Nunca invente dados do usuário.
+        Rotinas ficam em \(RoutineStore.file.path): array JSON de {"nome", "hora" (0-23), "minuto", \
+        "dias" (1=domingo...7=sábado), "pedido"}. Gatilhos ficam em \(TriggerStore.file.path): array de \
+        {"frase", "pedido"}. Quando pedirem "todo dia às 8h faz X" ou "quando eu disser Y faz Z", edite o arquivo \
+        (mantenha o JSON válido) e confirme em uma frase.
         Vídeo: qualquer pedido de vídeo (criar, editar, DaVinci, reels, legenda, motion, roteiro) é \
         trabalho da skill /ogab: use a skill. Anúncio, tráfego pago, campanha, Meta ou Google Ads, CPA, \
         ROAS, criativo de anúncio ou relatório de campanha é trabalho da skill /ojhon: use a skill.

@@ -82,6 +82,7 @@ final class CloudPet: ObservableObject {
 
     /// A Claude Code agent finished a task.
     func taskFinished() {
+        CloudMissions.shared.record(.tarefaClaude)
         xp += 10
         humorStored = min(100, humor + 3)
         save()
@@ -180,9 +181,13 @@ struct CloudPetCardView: View {
             let mood = pet.mood(state)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
-                    Text("Cloud")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(Color(hex: "#F5F6F8"))
+                    Button { CloudPanelWindow.shared.show(.missoes) } label: {
+                        Text(CloudIdentity.name)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(Color(hex: "#F5F6F8"))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Missões, conquistas, rotinas e gatilhos")
                     Text("\(mood.emoji) \(mood.label)")
                         .font(.system(size: 11))
                         .foregroundColor(Color(hex: "#B0B5BE"))
@@ -210,6 +215,7 @@ struct CloudPetCardView: View {
 
     @ObservedObject private var offload = CardOffload.shared
     @ObservedObject private var timers = CloudTimers.shared
+    @ObservedObject private var screen = ScreenTools.shared
 
     /// A card being copied, else what the agent is doing right now, else Cloud's suggestion.
     @ViewBuilder private var bottomLine: some View {
@@ -217,6 +223,11 @@ struct CloudPetCardView: View {
             HStack(spacing: 5) {
                 Image(systemName: "sdcard.fill").font(.system(size: 10)).foregroundColor(Color(hex: "#7CC4FF"))
                 Text(status).font(.system(size: 11)).foregroundColor(Color(hex: "#D7DAE0")).lineLimit(2)
+            }
+        } else if let rec = screen.recordingLine {
+            HStack(spacing: 5) {
+                Circle().fill(Color.red).frame(width: 7, height: 7)
+                Text(rec).font(.system(size: 11).monospacedDigit()).foregroundColor(Color(hex: "#D7DAE0"))
             }
         } else if let line = timers.nextLine {
             HStack(spacing: 5) {

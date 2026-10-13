@@ -41,6 +41,20 @@
 <a id="o-que-ele-faz"></a>
 # O QUE ELE FAZ
 
+<a id="o-ovo"></a>
+## O ovo
+
+Na primeira vez que abre, aparece um ovo: você dá um nome ao seu companheiro, escolhe o bichinho e ele **choca** na sua frente. Dali pra frente é ele que mora no notch, atende pelo nome que você deu e cresce com você.
+
+## Rotinas, gatilhos, missões e conquistas
+
+* **Rotinas:** "todo dia às 8h, bom dia", "toda segunda às 9h30, ideias de reels". Pelo painel ou por voz.
+* **Gatilhos:** "quando eu disser modo edição, fecha o WhatsApp e abre o DaVinci".
+* **Missões do dia e conquistas:** três missões novas por dia, sequência de dias, medalhas e experiência para o bichinho evoluir.
+* **Timers e lembretes:** "timer de 10 minutos", "me lembra às 15h de exportar o vídeo".
+* **Tela e clipboard:** "que erro é esse?" (ele lê a tela), "grava a tela", "traduz o que eu copiei", "traduz essa página".
+* **Vídeo de referência:** "gostei desse vídeo, cria uma ideia em cima dele" com o vídeo aberto no navegador: a /ogab transcreve e escreve um roteiro novo.
+
 <a id="voz-e-conversa-continua"></a>
 ## Voz e conversa contínua
 

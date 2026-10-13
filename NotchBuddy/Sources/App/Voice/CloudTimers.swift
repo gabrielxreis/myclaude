@@ -109,6 +109,7 @@ final class CloudTimers: ObservableObject {
     }
 
     private func add(_ item: Item) {
+        CloudMissions.shared.record(.timer)
         items.append(item)
         save()
         CloudPet.shared.interacted()

@@ -27,7 +27,7 @@ enum ChatGPTBrain {
     static func isQuestion(_ text: String) -> Bool {
         let n = text.lowercased().folding(options: .diacriticInsensitive, locale: nil)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if n.hasPrefix("/") { return false }   // a skill
+        if n.hasPrefix("/") || n.contains("[tela]") { return false }   // a skill, or the screen (Claude reads images)
         let doing = ["abre", "abrir", "cria", "criar", "faz ", "fazer", "edita", "editar", "roda ", "rodar",
                      "manda", "mandar", "legenda", "coloca", "apaga", "instala", "salva", "escreve",
                      "renderiza", "exporta", "corta", "monta", "gera ", "gerar", "skill", "ogab", "ojhon"]

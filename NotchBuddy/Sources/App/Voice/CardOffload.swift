@@ -242,7 +242,7 @@ final class CardOffload: ObservableObject {
             if job.davinci { message += " " + (await buildInDaVinci(job, main)) }
         }
         SoundEngine.shared.play(ok ? "finish" : "error")
-        if ok { CloudPet.shared.taskFinished() }
+        if ok { CloudPet.shared.taskFinished(); CloudMissions.shared.record(.cartao) }
         status = nil
         running = false
         Self.notify(message)

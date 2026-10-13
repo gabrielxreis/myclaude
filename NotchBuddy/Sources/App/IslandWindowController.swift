@@ -363,6 +363,10 @@ final class IslandWindowController: NSWindowController {
                 }
                 return
             }
+            if phrase == "/ovo" {   // the first-launch egg again
+                Task { @MainActor in CloudOnboardingWindow.shared.show() }
+                return
+            }
             if phrase == "/atualizar" {   // "Verificar agora"
                 Task { @MainActor in
                     await CloudUpdater.shared.check(manual: true)

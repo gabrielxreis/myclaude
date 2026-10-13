@@ -38,7 +38,21 @@ enum CloudLocalActions {
 
     /// Runs the clauses from `skip` on, in order, until one needs Claude. Returns what Cloud
     /// says for each local one and the rest of the request for Claude (nil when all were local).
-    static func process(_ text: String, skip: Int = 0) -> (replies: [String], rest: String?) {
+    static func process(_ text: String, skip: Int = 0, expanded: Bool = false) -> (replies: [String], rest: String?) {
+        // Defining a routine or a trigger comes first ("quando eu disser X, ..." contains X).
+        if let r = VoiceSetup.trigger(text) ?? VoiceSetup.routine(text) { return ([r], nil) }
+        // A trigger of mine ("modo edição") stands for its request, once (no chains).
+        if skip == 0, !expanded, let e = TriggerStore.shared.expand(text) { return process(e, expanded: true) }
+        if let r = openPanel(text) { return ([r], nil) }
+        let nn = normalise(text)
+        if ScreenTools.isPageTranslation(nn) { return ([ScreenTools.shared.translatePage()], nil) }
+        if ScreenTools.isClipboardRequest(nn) { return ([ScreenTools.shared.clipboard(text, nn)], nil) }
+        if ScreenTools.isRecordRequest(nn) { return ([ScreenTools.shared.record(nn)], nil) }
+        if ScreenTools.isLookRequest(nn) {
+            let look = ScreenTools.lookRequest(text)
+            return ([look.reply], look.rest)
+        }
+        if text.trimmingCharacters(in: .whitespaces).hasPrefix("/") { CloudMissions.shared.record(.skill) }
         // A card offload in progress: this is the answer to its question. Or a new offload.
         if CardOffload.shared.awaiting { return ([CardOffload.shared.answer(text)], nil) }
         if CardOffload.isRequest(text) { return ([CardOffload.shared.begin(text)], nil) }
@@ -70,6 +84,7 @@ enum CloudLocalActions {
             NSWorkspace.shared.openApplication(at: app.url, configuration: .init(), completionHandler: nil)
             if isBrowser(app.url) { lastBrowser = app.url }
             lastOpenedApp = squash(app.name)
+            CloudMissions.shared.record(.app)
             appendAppLog("nb.log", "[Cloud] local open \(app.name)")
             return "Abrindo o \(app.name)."
         case .quit:
@@ -81,6 +96,19 @@ enum CloudLocalActions {
         case .search:
             return nil
         }
+    }
+
+    // MARK: Panel
+
+    /// "abre as rotinas", "mostra minhas conquistas", "abre o painel".
+    private static func openPanel(_ text: String) -> String? {
+        let n = normalise(text)
+        guard ["abre", "abrir", "mostra", "mostrar", "ver", "quero ver"].contains(where: { n.hasPrefix($0) || n.contains(" " + $0 + " ") }) else { return nil }
+        let map: [(String, CloudPanelWindow.Tab)] = [("rotina", .rotinas), ("gatilho", .gatilhos), ("missoes", .missoes), ("missao", .missoes),
+                                                     ("conquista", .conquistas), ("painel", .rotinas)]
+        guard let hit = map.first(where: { n.contains($0.0) }) else { return nil }
+        CloudPanelWindow.shared.show(hit.1)
+        return "Abrindo \(hit.1.rawValue.lowercased())."
     }
 
     // MARK: Folders and sites
@@ -240,6 +268,7 @@ enum CloudLocalActions {
             NSWorkspace.shared.open(url)
         }
         appendAppLog("nb.log", "[Cloud] local search \(query)")
+        CloudMissions.shared.record(.pesquisa)
         return "Pesquisando \(query)."
     }
 

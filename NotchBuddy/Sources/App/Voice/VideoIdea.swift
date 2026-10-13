@@ -47,6 +47,7 @@ enum VideoIdea {
             if ok { CloudChatWindow.shared.show(conversation: id) }
         }
         appendAppLog("nb.log", "[Cloud] video idea from \(url)")
+        CloudMissions.shared.record(.video)
         return "Peguei o vídeo \(title). Vou estudar e montar o roteiro em segundo plano, te aviso quando estiver pronto."
     }
 

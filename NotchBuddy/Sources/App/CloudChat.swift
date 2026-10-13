@@ -92,6 +92,7 @@ final class CloudChatStore: ObservableObject {
             }
         }
         CloudPet.shared.interacted()
+        CloudMissions.shared.record(.conversa)
         append(CloudMessage(role: .user, text: text), to: idx)
         if conversations[idx].messages.count == 1 { conversations[idx].title = Self.title(from: text) }
         thinking.insert(id)
@@ -331,7 +332,7 @@ struct CloudConversationView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 4) {
-                Text(m.via.map { "Cloud · \($0)" } ?? "Cloud")
+                Text(m.via.map { "\(CloudIdentity.name) · \($0)" } ?? CloudIdentity.name)
                     .font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
                 ChatMarkdownView(markdown: m.text)
             }

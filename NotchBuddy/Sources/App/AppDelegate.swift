@@ -7,6 +7,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var islandController: IslandWindowController?
     private var demoMenuItem: NSMenuItem?
 
+    #if !APPSTORE
+    @objc func openCloudChat() { CloudChatWindow.shared.show() }
+    @objc func openCloudPanel() { CloudPanelWindow.shared.show() }
+    #endif
+
     func applicationWillTerminate(_ notification: Notification) {
         DemoEngine.shared.stop()
         HotKeyCenter.shared.unregisterAll()
@@ -23,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if !APPSTORE
         CloudUpdater.shared.start()   // once a day: new version from GitHub, /ogab, /ojhon
         _ = CloudTimers.shared        // saved timers and reminders ring even after a restart
+        _ = RoutineStore.shared       // routines run at their time
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { CloudOnboardingWindow.shared.showIfNeeded() }   // the egg, once
         #endif
         #if DEBUG
         let debugMenu = NSMenu(title: "Debug")
@@ -59,6 +66,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: NSLocalizedString("Open Coucou", comment: ""), action: #selector(openIsland), keyEquivalent: "")
         menu.addItem(.separator())
+        #if !APPSTORE
+        menu.addItem(withTitle: "Conversas", action: #selector(openCloudChat), keyEquivalent: "")
+        menu.addItem(withTitle: "Rotinas, gatilhos e missões", action: #selector(openCloudPanel), keyEquivalent: "")
+        #endif
         menu.addItem(withTitle: NSLocalizedString("Weekly recap", comment: ""), action: #selector(openWeeklyRecap), keyEquivalent: "")
         menu.addItem(withTitle: NSLocalizedString("Settings…", comment: ""), action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(.separator())
