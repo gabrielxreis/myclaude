@@ -295,6 +295,10 @@ struct SettingsView: View {
             .padding(6)
         }
 
+        GroupBox("Widgets do notch") {
+            CloudWidgetsSettings().padding(6)
+        }
+
         GroupBox("Personagem") {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
@@ -304,6 +308,30 @@ struct SettingsView: View {
                     }
                     .labelsHidden().frame(maxWidth: 220)
                     .onChange(of: characterRaw) { _, _ in SoundEngine.shared.reload() }   // its own sounds
+                }
+                if characterRaw == "importado" {
+                    HStack(spacing: 10) {
+                        Text("Personagem importado").frame(width: 150, alignment: .leading)
+                        Picker("Importado", selection: $importedPack) {
+                            ForEach(CloudImportedPacks.all()) { Text($0.name).tag($0.id) }
+                        }
+                        .labelsHidden().frame(maxWidth: 220)
+                        .onChange(of: importedPack) { _, v in CloudImportedPacks.selectedID = v }
+                    }
+                }
+                HStack(spacing: 10) {
+                    Text("").frame(width: 150)
+                    Button("Importar personagem…") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseDirectories = true; panel.canChooseFiles = false
+                        panel.message = "Escolha uma pasta com parado.png (e se quiser ouvindo, feliz, pensando, falando, sono, carente, surpreso)"
+                        if panel.runModal() == .OK, let u = panel.url {
+                            if let err = CloudImportedPacks.importFolder(u) { importMessage = err }
+                            else { importMessage = "Importado!"; importedPack = CloudImportedPacks.selectedID ?? ""; characterRaw = "importado" }
+                        }
+                    }
+                    Button("Abrir pasta") { NSWorkspace.shared.open(CloudImportedPacks.folder) }
+                    Text(importMessage).font(.system(size: 11)).foregroundColor(.secondary)
                 }
                 HStack(spacing: 10) {
                     Text("Skin").frame(width: 150, alignment: .leading)
@@ -1551,6 +1579,8 @@ struct SettingsView: View {
     @AppStorage("cloudSkin") private var skinRaw: String = "auto"
     @AppStorage("cloudListenSounds") private var listenSounds: Bool = true
     @State private var weatherCity: String = CloudWeather.city
+    @State private var importedPack: String = CloudImportedPacks.selectedID ?? ""
+    @State private var importMessage = ""
     @State private var autoUpdate: Bool = CloudUpdater.enabled
     @ObservedObject private var updater = CloudUpdater.shared
     @State private var allowedRulesText: String = VoiceSettings.allowedRulesText

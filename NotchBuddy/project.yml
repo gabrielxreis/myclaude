@@ -98,6 +98,8 @@ targets:
         NSMicrophoneUsageDescription: "O Cloud usa o microfone para ouvir quando você chama \"Ei Cloud\"."
         NSSpeechRecognitionUsageDescription: "O Cloud transforma sua voz em texto no próprio Mac para entender seus comandos."
         NSAccessibilityUsageDescription: "Pour lire le titre de la fenêtre active et l'attacher comme contexte."
+        NSCalendarsFullAccessUsageDescription: "O Cloud lê a sua agenda para mostrar o próximo compromisso e falar dela no bom dia."
+        NSCalendarsUsageDescription: "O Cloud lê a sua agenda para mostrar o próximo compromisso e falar dela no bom dia."
         NSContactsUsageDescription: "O Cloud procura um e-mail nos seus contatos quando você pede, por voz, para preparar uma mensagem."
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

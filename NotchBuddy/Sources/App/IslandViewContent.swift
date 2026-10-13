@@ -180,7 +180,7 @@ struct OverviewView: View {
             // Right card: Cloud's quick actions only (no agent pills in My Cloud)
             CardBackground(wash: nil) {
                 #if !APPSTORE
-                CloudQuickActionsRow()
+                CloudWidgetsCard()
                 #else
                 AgentPillsView(state: state)
                 #endif

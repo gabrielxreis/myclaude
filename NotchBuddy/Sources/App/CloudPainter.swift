@@ -9,6 +9,8 @@ import SwiftUI
 enum CloudCharacterKind: String, CaseIterable, Identifiable {
     case mochi, bolinho, nuvem, marshmallow, vapor
     case claquete, camera, gotinha, pipoca, lampada, planetinha, gatinho, bolha
+    /// One of my own characters, imported from images (Ajustes → Personagem → Importar).
+    case importado
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -22,6 +24,7 @@ enum CloudCharacterKind: String, CaseIterable, Identifiable {
         case .planetinha: "Planetinha"
         case .gatinho: "Gatinho de nuvem"
         case .bolha: "Bolha de sabão"
+        case .importado: "Importado (\(CloudImportedPacks.selectedName ?? "nenhum"))"
         case .nuvem: "Nuvem"
         case .marshmallow: "Marshmallow"
         case .vapor: "Vapor"
@@ -173,7 +176,10 @@ struct CloudPainter {
         behind(&c, s, f)
         // Bolha: pops when startled, then forms again.
         let popped = kind == .bolha && face == .surpreso && faceT < 0.45
-        if popped { bubblePop(&c, s) } else {
+        if kind == .importado {
+            drawImported(&c, s)
+            if skin != .padrao && skin != .cachecol { accessory(&c, s) }
+        } else if popped { bubblePop(&c, s) } else {
             body(&c, s)
             if kind == .marshmallow { cowlick(&c, s) }
             if kind == .bolinho { cowlick(&c, s, small: true) }
@@ -206,7 +212,7 @@ struct CloudPainter {
         case .bolinho:
             p.addRoundedRect(in: CGRect(x: -0.56 * s, y: -0.36 * s, width: 1.12 * s, height: 0.76 * s),
                              cornerSize: CGSize(width: 0.36 * s, height: 0.36 * s), style: .continuous)
-        case .marshmallow, .mochi:
+        case .marshmallow, .mochi, .importado:
             p.addRoundedRect(in: CGRect(x: -0.5 * s, y: -0.42 * s, width: s, height: 0.84 * s),
                              cornerSize: CGSize(width: 0.3 * s, height: 0.3 * s), style: .continuous)
         case .nuvem:
@@ -634,6 +640,34 @@ struct CloudPainter {
             cc.rotate(by: .radians(t * 3 + Double(i)))
             cc.fill(Path(CGRect(x: -0.015 * s, y: -0.008 * s, width: 0.03 * s, height: 0.016 * s)), with: .color(Color(hex: colors[i % 5])))
         }
+    }
+
+    // MARK: Imported characters
+
+    /// The image of the current mood (falls back to "parado"), drawn on the animated body.
+    func drawImported(_ c: inout GraphicsContext, _ s: Double) {
+        let names: [String]
+        switch face {
+        case .ouvindo: names = ["ouvindo", "feliz"]
+        case .pensando: names = ["pensando"]
+        case .falando: names = ["falando", "feliz"]
+        case .feliz: names = ["feliz"]
+        case .focado: names = ["focado", "pensando"]
+        case .sono: names = ["sono", "dormindo"]
+        case .carente: names = ["carente", "triste"]
+        case .surpreso: names = ["surpreso", "ouvindo"]
+        case .tonto: names = ["tonto", "surpreso"]
+        case .parado: names = []
+        }
+        guard let img = CloudImportedPacks.image(names + ["parado"]) else {
+            var p = Path(); p.addRoundedRect(in: CGRect(x: -0.4 * s, y: -0.4 * s, width: 0.8 * s, height: 0.8 * s), cornerSize: CGSize(width: 20, height: 20))
+            c.stroke(p, with: .color(.white.opacity(0.3)), style: StrokeStyle(lineWidth: 2, dash: [6, 6]))
+            return
+        }
+        let side = 1.12 * s
+        let aspect = img.size.width / max(img.size.height, 1)
+        let w = aspect >= 1 ? side : side * aspect, h = aspect >= 1 ? side / aspect : side
+        c.draw(Image(nsImage: img), in: CGRect(x: -w / 2, y: -h / 2 - 0.04 * s, width: w, height: h))
     }
 
     // MARK: Character quirks

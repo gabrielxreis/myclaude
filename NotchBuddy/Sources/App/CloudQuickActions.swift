@@ -150,8 +150,13 @@ private extension JSONEncoder {
 
 struct CloudQuickActionsRow: View {
     @ObservedObject var store = CloudQuickActions.shared
+    /// Inside a widget tile: two tight columns, no outer padding.
+    var compact = false
 
-    private let columns = [GridItem(.adaptive(minimum: 84), spacing: 6)]
+    private var columns: [GridItem] {
+        compact ? [GridItem(.flexible(), spacing: 4), GridItem(.flexible(), spacing: 4)]
+                : [GridItem(.adaptive(minimum: 84), spacing: 6)]
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -183,7 +188,7 @@ struct CloudQuickActionsRow: View {
                 .menuIndicator(.hidden)
                 .help("Fixar uma skill ou criar um pedido pronto")
             }
-            .padding(10)
+            .padding(compact ? 0 : 10)
         }
         .onAppear { store.reload() }
     }
@@ -195,8 +200,8 @@ struct CloudQuickActionsRow: View {
                 if let title { Text(title).font(.system(size: 10, weight: .medium)).lineLimit(1) }
             }
             .foregroundColor(Color(hex: "#D7DAE0"))
-            .padding(.horizontal, 9)
-            .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+            .padding(.horizontal, compact ? 6 : 9)
+            .frame(maxWidth: .infinity, minHeight: compact ? 20 : 24, alignment: .leading)
             .background(Capsule().fill(Color.white.opacity(0.07)))
             .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1))
             .contentShape(Capsule())

@@ -44,6 +44,10 @@
 	</dict>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Pour sauter au terminal, envoyer des mails et piloter Musique et Spotify.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>O Cloud lê a sua agenda para mostrar o próximo compromisso e falar dela no bom dia.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>O Cloud lê a sua agenda para mostrar o próximo compromisso e falar dela no bom dia.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>O Cloud procura um e-mail nos seus contatos quando você pede, por voz, para preparar uma mensagem.</string>
 	<key>NSHighResolutionCapable</key>
