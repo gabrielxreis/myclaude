@@ -140,7 +140,7 @@ Dois cliques em **`Instalar My Cloud.command`**. Ele:
 1. Instala o **Claude Code** (se faltar) e confere o login da sua assinatura.
 2. Instala ou atualiza a **/ogab** e a **/ojhon**.
 3. Instala o **RustDesk**, para acessar o Mac pelo celular.
-4. Compila o My Cloud, apaga a versão antiga e instala em **Aplicativos**.
+4. Baixa o **app pronto** (última release), apaga a versão antiga e instala em **Aplicativos**. Não precisa de Xcode.
 
 Depois, no próprio app (ícone na barra de menu → Ajustes):
 
@@ -148,9 +148,11 @@ Depois, no próprio app (ícone na barra de menu → Ajustes):
 * **Agentes:** "Instalar hooks" do Claude Code, para o Cloud ver as suas sessões.
 * **ChatGPT (opcional):** `brew install --cask codex` e `codex login` com a sua conta.
 
-**Atualização automática.** Uma vez por dia o My Cloud confere este repositório: se tiver versão nova, ele baixa, compila em segundo plano, troca a versão em Aplicativos e avisa. A /ogab e a /ojhon são atualizadas junto. Dá para desligar ou verificar na hora em **Ajustes → Geral → Atualizações**.
+**Atualização automática.** Uma vez por dia o My Cloud confere as releases deste repositório: se tiver versão nova, ele baixa o app pronto, troca a versão em Aplicativos e avisa. A /ogab e a /ojhon são atualizadas junto. Dá para desligar ou verificar na hora em **Ajustes → Geral → Atualizações**.
 
-**Requisitos:** macOS 15 ou mais novo, Xcode (para compilar), assinatura do Claude (Pro ou Max). Para o cartão de memória com proxies e transcrição: ffmpeg e Whisper local, que a /ogab instala.
+**Requisitos:** macOS 15 ou mais novo e assinatura do Claude (Pro ou Max). Xcode só para quem quiser compilar.
+
+> Use o **instalador**. Se você baixar o `MyCloud.zip` pelo navegador, o macOS pode avisar que o desenvolvedor não foi identificado (o app ainda não é notarizado pela Apple); nesse caso, botão direito no app → Abrir. Para o cartão de memória com proxies e transcrição: ffmpeg e Whisper local, que a /ogab instala.
 
 <a id="configuracao"></a>
 # CONFIGURAÇÃO

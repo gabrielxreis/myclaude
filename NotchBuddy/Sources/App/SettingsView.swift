@@ -288,7 +288,7 @@ struct SettingsView: View {
                          : updater.status)
                         .font(.system(size: 11)).foregroundColor(.secondary)
                 }
-                Text("Versão desta build: " + (CloudUpdater.buildDate?.formatted(date: .abbreviated, time: .shortened) ?? "sem data") + ". As versões novas vêm de github.com/gabrielxreis/myclaude e são compiladas no seu Mac (precisa do Xcode).")
+                Text("Versão desta build: " + (CloudUpdater.buildDate?.formatted(date: .abbreviated, time: .shortened) ?? "sem data") + ". As versões novas vêm prontas de github.com/gabrielxreis/myclaude (não precisa de Xcode).")
                     .font(.system(size: 11)).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

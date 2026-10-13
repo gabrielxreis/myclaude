@@ -44,13 +44,28 @@ else
 fi
 
 info "5/6 App My Cloud"
-command -v xcodebuild >/dev/null 2>&1 || fail "Precisa do Xcode instalado (App Store) para compilar o My Cloud."
-command -v xcodegen >/dev/null 2>&1 || { echo "  Instalando o xcodegen..."; brew install xcodegen >/dev/null; }
-# scripts/build-mycloud.sh compila, assina com identidade estável (o macOS guarda as permissões
-# de microfone e fala entre versões), apaga a versão antiga e instala em Aplicativos.
-MYCLOUD_NO_OPEN=1 "$ROOT/scripts/build-mycloud.sh"
-[ -d "$DEST" ] || fail "A compilação não gerou o app."
-ok "instalado em $DEST (versão antiga removida)"
+# The ready-made app from the latest release (no Xcode). Without a release, a Mac with Xcode
+# builds it from this folder.
+pkill -f "My Cloud.app/Contents/MacOS" 2>/dev/null || true
+ZIP_URL=$(curl -fsSL https://api.github.com/repos/gabrielxreis/myclaude/releases/latest 2>/dev/null \
+  | python3 -c 'import json,sys; a=[x["browser_download_url"] for x in json.load(sys.stdin).get("assets",[]) if x["name"]=="MyCloud.zip"]; print(a[0] if a else "")' 2>/dev/null || true)
+if [ -n "$ZIP_URL" ]; then
+  T=$(mktemp -d)
+  curl -fsSL "$ZIP_URL" -o "$T/MyCloud.zip" && ditto -x -k "$T/MyCloud.zip" "$T"
+  [ -d "$T/My Cloud.app" ] || fail "Não consegui baixar o app."
+  rm -rf "$DEST"                          # a versão antiga sai sempre
+  ditto "$T/My Cloud.app" "$DEST"
+  xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
+  rm -rf "$T"
+  ok "instalado em $DEST (app pronto, versão antiga removida)"
+elif command -v xcodebuild >/dev/null 2>&1 && [ -d /Applications/Xcode.app ]; then
+  command -v xcodegen >/dev/null 2>&1 || brew install xcodegen >/dev/null
+  MYCLOUD_NO_OPEN=1 "$ROOT/scripts/build-mycloud.sh"
+  [ -d "$DEST" ] || fail "A compilação não gerou o app."
+  ok "instalado em $DEST (compilado aqui, versão antiga removida)"
+else
+  fail "Ainda não há app pronto para baixar e este Mac não tem o Xcode para compilar."
+fi
 
 info "6/6 Abrindo o My Cloud"
 open "$DEST"
