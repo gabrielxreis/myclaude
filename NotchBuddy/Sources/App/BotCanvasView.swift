@@ -21,7 +21,7 @@ struct BotCanvasView: View {
         #if !APPSTORE
         if CloudCharacterKind.current != .mochi {
             let _ = characterRaw   // observed: the view redraws when the choice changes
-            CloudCharacterView(state: state, kind: CloudCharacterKind.current, paused: paused)
+            CloudCharacterView(state: state, kind: CloudCharacterKind.current, paused: paused, overhang: particleOverhang)
         } else {
             mochiBody
         }

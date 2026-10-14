@@ -12,12 +12,17 @@ enum CloudIdentity {
     /// The companion's name ("Cloud" until the egg hatches).
     static var name: String {
         get { UserDefaults.standard.string(forKey: "cloudPetName").flatMap { $0.isEmpty ? nil : $0 } ?? "Cloud" }
-        set { UserDefaults.standard.set(newValue, forKey: "cloudPetName") }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "cloudPetName")
+            VoiceSettings.refreshWakeNames()   // "Ei <nome>" wakes it right away
+        }
     }
     static var hatched: Bool {
         get { UserDefaults.standard.bool(forKey: "myCloudHatched") }
         set { UserDefaults.standard.set(newValue, forKey: "myCloudHatched") }
     }
+    /// Settings → Dados: the egg shows again at the next launch.
+    static func resetOnboarding() { hatched = false }
 }
 
 @MainActor
@@ -47,6 +52,12 @@ final class CloudOnboardingWindow: NSObject, NSWindowDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Closed: drop the view, or its egg animation keeps running at 60 fps in the background.
+    func windowWillClose(_ notification: Notification) {
+        window?.contentView = nil
+        window = nil
     }
 }
 

@@ -1,6 +1,6 @@
 #!/bin/zsh
-# Instalador do My Cloud (macOS): o app + as skills /ogab (vídeo) e /ojhon (tráfego pago).
-# Dois cliques neste arquivo. Pode rodar de novo quando quiser: atualiza tudo.
+# Instalador do My Cloud (macOS): instala só o app (e confere o Claude Code, que ele usa).
+# Dois cliques neste arquivo. Pode rodar de novo quando quiser: atualiza o app.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -15,7 +15,7 @@ fail() { printf "  \033[31m✗\033[0m %s\n" "$1"; exit 1; }
 [ "$(uname)" = "Darwin" ] || fail "O My Cloud é só para macOS."
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-info "1/6 Claude Code"
+info "1/4 Claude Code"
 if ! command -v claude >/dev/null 2>&1; then
   echo "  Instalando o Claude Code (instalador oficial da Anthropic)..."
   curl -fsSL https://claude.ai/install.sh | bash
@@ -28,22 +28,7 @@ if claude -p "ok" --output-format json 2>/dev/null | grep -q '"is_error":true'; 
   claude < /dev/tty || true
 fi
 
-info "2/6 Skill /ogab (vídeo: DaVinci, legenda, motions, roteiro)"
-curl -fsSL https://raw.githubusercontent.com/gabrielxreis/ogab/main/install.sh | bash
-ok "/ogab pronta"
-
-info "3/6 Skill /ojhon (tráfego pago: auditoria, plano, criativo, relatório)"
-curl -fsSL https://raw.githubusercontent.com/gabrielxreis/ojhon/main/install.sh | bash
-ok "/ojhon pronta"
-
-info "4/6 RustDesk (acesso remoto ao Mac pelo celular ou outro computador)"
-if [ -d "/Applications/RustDesk.app" ]; then ok "RustDesk já instalado"
-else
-  command -v brew >/dev/null 2>&1 && brew install --cask rustdesk >/dev/null && ok "RustDesk instalado" \
-    || warn "não consegui instalar o RustDesk: brew install --cask rustdesk"
-fi
-
-info "5/6 App My Cloud"
+info "2/4 App My Cloud"
 # The ready-made app from the latest release (no Xcode). Without a release, a Mac with Xcode
 # builds it from this folder.
 pkill -f "My Cloud.app/Contents/MacOS" 2>/dev/null || true
@@ -67,18 +52,30 @@ else
   fail "Ainda não há app pronto para baixar e este Mac não tem o Xcode para compilar."
 fi
 
-info "6/6 Abrindo o My Cloud"
+info "3/4 Usar qualquer app (Peekaboo)"
+# Lets Cloud see the screen and click in any app (github.com/openclaw/Peekaboo, MIT). Needs Node 22+.
+if command -v npx >/dev/null 2>&1 && [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge 22 ]; then
+  if ! claude mcp get peekaboo >/dev/null 2>&1; then
+    cp "$HOME/.claude.json" "$HOME/.claude.json.bak-$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
+    claude mcp add --scope user peekaboo -- npx -y @steipete/peekaboo mcp >/dev/null 2>&1 && ok "Peekaboo adicionado ao Claude Code" \
+      || warn "não consegui adicionar o Peekaboo (dá para ligar depois em Ajustes → Assistente)"
+  else ok "Peekaboo já estava no Claude Code"; fi
+  defaults write com.gabrielreis.mycloud cloudComputerUse -bool true
+else
+  warn "sem Node 22+: o \"usar qualquer app\" fica para depois (brew install node e ligue em Ajustes → Assistente)"
+fi
+
+info "4/4 Abrindo o My Cloud"
 open "$DEST"
 ok "pronto"
 
 cat <<'FIM'
 
-  Falta pouco, no próprio app (ícone na barra de menu → Ajustes):
-   • Voz: aceite o microfone e o reconhecimento de fala quando o Mac pedir.
-   • Agentes: "Instalar hooks" do Claude Code, para o Cloud ver suas sessões.
-   • Voz → O que o Cloud pode fazer: escolha o modo (Lista de ações é o padrão).
-   • RustDesk: entre com Google ou GitHub e libere Acessibilidade e Gravação de Tela
-     nos Ajustes do Sistema, para acessar o Mac de longe.
-  Depois é só dizer: "Ei Cloud, abre o Chrome e pesquisa…"
+  Na primeira abertura, o My Cloud pede as permissões uma depois da outra (microfone, fala,
+  contatos, calendário, controlar o Chrome/Safari/Terminal) e no fim mostra o que só você liga:
+   • Acessibilidade e Gravação de tela para o My Cloud (Ajustes do Sistema).
+   • Chrome: Visualização → Desenvolvedor → Permitir o JavaScript do Eventos da Apple.
+  Tudo fica em Ajustes → Permissões, com o botão "Configurar tudo agora".
+  Depois é só dizer: "Ei Cloud, abre o Chrome, entra no YouTube e pesquisa…"
 
 FIM

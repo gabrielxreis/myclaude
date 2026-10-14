@@ -50,6 +50,7 @@ final class WakeSpotter: @unchecked Sendable {
     private var request:      SFSpeechAudioBufferRecognitionRequest?
     private var task:         SFSpeechRecognitionTask?
     private var active        = false
+    private var draining      = false   // audio ended, waiting for the recognizer's last words
     private var phase:        Phase = .wake
     private var partialCount  = 0
     private var maxWords      = 0       // diagnostics only
@@ -67,6 +68,18 @@ final class WakeSpotter: @unchecked Sendable {
 
     var isInCommandPhase: Bool { lock.withLock { phase == .command } }
     var isActive: Bool { lock.withLock { active } }
+    var isDraining: Bool { lock.withLock { active && draining } }
+
+    /// The speech ended: tell the recognizer there is no more audio, without cancelling it.
+    /// The on-device recognizer often returns the words ~1 s after the audio; cancelling at
+    /// once (what endWindow does) threw them away, so almost every wake window came back empty.
+    func finishAudio() {
+        lock.withLock {
+            guard active else { return }
+            draining = true
+            request?.endAudio()
+        }
+    }
 
     /// Open a recognition window.
     /// - `startInCommandPhase`: when `true`, skip the wake-phrase gate and start
@@ -98,15 +111,19 @@ final class WakeSpotter: @unchecked Sendable {
             let req = SFSpeechAudioBufferRecognitionRequest()
             req.shouldReportPartialResults  = true
             req.requiresOnDeviceRecognition = true
-            let extra = startInCommandPhase ? additionalContextualStrings : [String]()
-            let names = VoiceSettings.wakeNames.split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-            req.contextualStrings = names + names.map { "Ei \($0)" } + extra
+            // The command is often said in the same breath as the wake phrase: hints in both phases.
+            let extra = additionalContextualStrings
+            let names = WakePhrase.hintNames
+            // The recognizer prefers these words: the name right after a greeting is written as
+            // the name instead of a Portuguese look-alike, or dropped.
+            let greetings = ["Ei", "Hey", "Oi", "Olá", "E aí", "Fala", "OK"]
+            req.contextualStrings = names + names.prefix(4).flatMap { n in greetings.map { "\($0) \(n)" } } + extra
             preroll.forEach { req.append($0) }
 
             recognizer   = r
             request      = req
             active       = true
+            draining     = false
             phase        = startInCommandPhase ? .command : .wake
             partialCount = 0
             taskGen      = gen.bump()   // new generation for this task
@@ -136,7 +153,7 @@ final class WakeSpotter: @unchecked Sendable {
     }
 
     func feed(_ buffer: AVAudioPCMBuffer) {
-        lock.withLock { request }?.append(buffer)
+        lock.withLock { draining ? nil : request }?.append(buffer)
     }
 
     /// Close the window. Bumps the generation so any in-flight callbacks from the
@@ -154,6 +171,7 @@ final class WakeSpotter: @unchecked Sendable {
             task         = nil
             recognizer   = nil
             active       = false
+            draining     = false
             phase        = .wake
             partialCount = 0
             gen.bump()   // invalidate callbacks from the task we just cancelled
@@ -215,6 +233,7 @@ final class WakeSpotter: @unchecked Sendable {
                 task         = nil
                 recognizer   = nil
                 active       = false
+                draining     = false
                 phase        = .wake
                 // partialCount kept: endWindow() reports it (WindowStats)
                 if let err = error as NSError? {

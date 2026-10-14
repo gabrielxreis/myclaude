@@ -21,6 +21,10 @@ enum VideoIdea {
 
     /// Starts the work; returns what Cloud says right away.
     static func start(_ request: String) -> String {
+        let ogab = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/skills/ogab/SKILL.md")
+        guard FileManager.default.fileExists(atPath: ogab.path) else {
+            return "Pra criar o roteiro a partir de um vídeo eu uso a skill /ogab, que não está instalada. Dá para instalar em github.com/gabrielxreis/ogab."
+        }
         guard let (url, title) = currentBrowserPage() else {
             return "Não achei o vídeo: abre ele no navegador (Chrome, Safari, Arc, Brave ou Edge) e me pede de novo."
         }
@@ -61,7 +65,11 @@ enum VideoIdea {
         let running = NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier)
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let lastFront = CloudPet.shared.frontApp?.bundleId
-        let ordered = browsers.sorted { a, _ in a.id == front || a.id == lastFront }.filter { running.contains($0.id) }
+        // The browser in front first, then the last one used, then the others (a valid ordering:
+        // the old comparator broke sort's rules and the order came out random).
+        func rank(_ id: String) -> Int { id == front ? 0 : id == lastFront ? 1 : 2 }
+        let ordered = browsers.filter { running.contains($0.id) }
+            .enumerated().sorted { (rank($0.element.id), $0.offset) < (rank($1.element.id), $1.offset) }.map(\.element)
         for b in ordered {
             let src = b.chromium
                 ? "tell application \"\(b.name)\" to return (URL of active tab of front window) & \"\\n\" & (title of active tab of front window)"

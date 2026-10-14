@@ -68,8 +68,20 @@ final class CloudWeather: ObservableObject {
 // MARK: - Mood the character shows
 
 
+/// A short expression on top of everything else ("não entendi").
+@MainActor
+final class CloudExpression {
+    static let shared = CloudExpression()
+    var puzzledUntil = Date.distantPast
+    var cheerUntil = Date.distantPast
+    func puzzle(for seconds: TimeInterval) { puzzledUntil = Date().addingTimeInterval(seconds) }
+    func cheer(for seconds: TimeInterval) { cheerUntil = Date().addingTimeInterval(seconds) }
+}
+
 @MainActor
 func cloudFace(_ state: AppState) -> CloudFace {
+    if Date() < CloudExpression.shared.puzzledUntil { return .duvida }
+    if Date() < CloudExpression.shared.cheerUntil { return .feliz }
     if state.voiceActive {
         switch state.voiceSubState {
         case .listening: return .ouvindo
@@ -103,6 +115,9 @@ struct CloudCharacterView: View {
     @ObservedObject var state: AppState
     let kind: CloudCharacterKind
     var paused: Bool = false
+    /// Extra room above the character for particles (the island gives Mochi 40 pt); the
+    /// character is drawn in the square below it, like BotEngine does.
+    var overhang: CGFloat = 0
     @ObservedObject private var weather = CloudWeather.shared
     @State private var faceStart = Date()
     @State private var lastFace: CloudFace = .parado
@@ -111,12 +126,17 @@ struct CloudCharacterView: View {
     @State private var blinkUntil = Date.distantPast
     @State private var taps: [Date] = []
     @State private var dizzyUntil = Date.distantPast
+    @State private var startledUntil = Date.distantPast
 
     var body: some View {
         TimelineView(.animation(paused: state.mode == .hidden || paused)) { tl in
-            Canvas { ctx, size in
+            Canvas { ctx0, size0 in
+                var ctx = ctx0
+                let size = CGSize(width: size0.width, height: max(1, size0.height - overhang))
+                // The painter centres a bit low (55 %); Mochi sits at the middle: match it.
+                ctx.translateBy(x: 0, y: overhang - (overhang > 0 ? size.height * 0.05 : 0))
                 let now = tl.date
-                let face = now < dizzyUntil ? CloudFace.tonto : cloudFace(state)
+                let face = now < dizzyUntil ? CloudFace.tonto : now < startledUntil ? CloudFace.surpreso : cloudFace(state)
                 CloudPainter(kind: kind, face: face, skin: CloudSkin.resolved(on: now),
                              t: now.timeIntervalSinceReferenceDate,
                              faceT: now.timeIntervalSince(faceStart),
@@ -143,17 +163,31 @@ struct CloudCharacterView: View {
             }
         }
         .onAppear { weather.refresh() }
-        .onTapGesture {
-            // A poke: a little hop. Three quick pokes: dizzy.
-            let now = Date()
-            taps = taps.filter { now.timeIntervalSince($0) < 1.5 } + [now]
-            if taps.count >= 3 {
-                dizzyUntil = now.addingTimeInterval(2.2); taps = []
-                SoundEngine.shared.play("dizzy")
-            } else {
-                hopAt = now
-                SoundEngine.shared.play("pop")
-            }
+        .onTapGesture { poke() }
+        // In the notch the clicks arrive through the window's mouse monitor.
+        .onReceive(NotificationCenter.default.publisher(for: .cloudPoke)) { _ in poke() }
+    }
+
+    /// A poke: startled face and a hop. Three quick pokes: dizzy.
+    private func poke() {
+        // News waiting: a tap opens them.
+        if CloudChangelog.shared.bubbleVisible { CloudChangelog.shared.open(); return }
+        // Listening to me: a tap stops it (what was said is dropped), like pressing stop.
+        if VoiceEngine.shared.isListeningForCommand {
+            VoiceEngine.shared.cancelListening()
+            CloudSounds.play(.stopped)
+            appendAppLog("nb.log", "[Voice] listening stopped by a tap")
+            return
+        }
+        let now = Date()
+        taps = taps.filter { now.timeIntervalSince($0) < 1.5 } + [now]
+        if taps.count >= 3 {
+            dizzyUntil = now.addingTimeInterval(2.2); taps = []
+            SoundEngine.shared.play("dizzy")
+        } else {
+            startledUntil = now.addingTimeInterval(0.7)
+            hopAt = now
+            SoundEngine.shared.play("pop")
         }
     }
 

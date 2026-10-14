@@ -30,12 +30,13 @@ enum CloudImportedPacks {
 
     static var selectedID: String? {
         get { UserDefaults.standard.string(forKey: "cloudImportedPack") ?? all().first?.id }
-        set { UserDefaults.standard.set(newValue, forKey: "cloudImportedPack"); cache.removeAll() }
+        set { UserDefaults.standard.set(newValue, forKey: "cloudImportedPack"); cache.removeAll(); missing.removeAll() }
     }
 
     static var selectedName: String? { all().first { $0.id == selectedID }?.name }
 
     nonisolated(unsafe) private static var cache: [String: NSImage] = [:]
+    nonisolated(unsafe) private static var missing: Set<String> = []   // so absent frames aren't re-read every tick
 
     /// The first image that exists among `names`, for the selected pack (cached).
     static func image(_ names: [String]) -> NSImage? {
@@ -43,8 +44,20 @@ enum CloudImportedPacks {
         for n in names {
             let key = id + "/" + n
             if let img = cache[key] { return img }
+            if missing.contains(key) { continue }
             let url = folder.appendingPathComponent(id).appendingPathComponent(n + ".png")
             if let img = NSImage(contentsOf: url) { cache[key] = img; return img }
+            missing.insert(key)
+        }
+        return nil
+    }
+
+    /// Like image(_:), with an animation frame of the chosen mood when the pack has it
+    /// (e.g. parado-piscar.png); falls back to the mood itself.
+    static func image(_ names: [String], variant: String?) -> NSImage? {
+        guard let variant else { return image(names) }
+        for n in names where image([n]) != nil {
+            return image([n + "-" + variant, n])
         }
         return nil
     }

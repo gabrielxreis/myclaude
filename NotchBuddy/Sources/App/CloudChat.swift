@@ -71,12 +71,20 @@ final class CloudChatStore: ObservableObject {
 
     func isThinking(_ id: UUID) -> Bool { thinking.contains(id) }
 
+    /// Settings → Dados: the whole history goes to the Trash (recoverable).
+    func clearAll() {
+        try? FileManager.default.trashItem(at: Self.fileURL, resultingItemURL: nil)
+        conversations = []
+        voiceConversationId = nil
+        notchConversationId = nil
+    }
+
     /// Records an exchange Cloud answered itself (a local action), without Claude.
     func record(user: String, cloud: String, in id: UUID) {
         guard let idx = index(id) else { return }
         CloudPet.shared.interacted()
         append(CloudMessage(role: .user, text: user), to: idx)
-        if conversations[0].messages.count == 1 { conversations[0].title = Self.title(from: user) }
+        if conversations[0].messages.count == 1 { conversations[0].title = Self.title(from: user); save() }
         append(CloudMessage(role: .cloud, text: cloud), to: 0)
     }
 
@@ -94,7 +102,8 @@ final class CloudChatStore: ObservableObject {
         CloudPet.shared.interacted()
         CloudMissions.shared.record(.conversa)
         append(CloudMessage(role: .user, text: text), to: idx)
-        if conversations[idx].messages.count == 1 { conversations[idx].title = Self.title(from: text) }
+        // append moves the conversation to the top: the title goes on index 0, not the old idx.
+        if conversations[0].messages.count == 1 { conversations[0].title = Self.title(from: text); save() }
         thinking.insert(id)
         defer { thinking.remove(id) }
 

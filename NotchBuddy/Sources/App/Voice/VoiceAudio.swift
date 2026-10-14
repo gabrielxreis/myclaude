@@ -76,8 +76,16 @@ final class VoiceAudio: @unchecked Sendable {
         guard !tapInstalled else { return }
 
         let input = engine.inputNode
-        AudioInputDevices.apply(to: input.audioUnit)   // Settings → Voz → Microfone
-        let fmt   = input.outputFormat(forBus: 0)
+        AudioInputDevices.apply(to: input.audioUnit)   // Settings → Voz e microfone → Microfone
+        // After switching the device, the node's output format stays the previous mic's (e.g.
+        // 44.1 kHz 1ch for the Mac's mic) while a USB mic runs at 48 kHz 2ch: a tap in the
+        // stale format received no audio at all ("audio stall"). Tap in the hardware's format.
+        let hw    = input.inputFormat(forBus: 0)
+        let out   = input.outputFormat(forBus: 0)
+        let fmt   = (hw.sampleRate > 0 && hw.channelCount > 0) ? hw : out
+        if hw.sampleRate != out.sampleRate || hw.channelCount != out.channelCount {
+            appendAppLog("nb.log", "[Voice] mic format \(Int(hw.sampleRate)) Hz \(hw.channelCount)ch (node said \(Int(out.sampleRate)) Hz \(out.channelCount)ch)")
+        }
 
         // Build a stateful mono 16 kHz Float32 converter for the recognizer.
         let target = AVAudioFormat(commonFormat: .pcmFormatFloat32,

@@ -16,7 +16,11 @@ final class CardOffload: ObservableObject {
     @Published private(set) var status: String?
 
     private enum Question { case camera, ssd, folder }
-    private(set) var awaiting: Bool = false
+    /// Waiting for my answer to its last question; forgotten after 3 minutes, so a command said
+    /// much later ("abre o Chrome") is never taken as the folder name.
+    var awaiting: Bool { awaitingFlag && Date().timeIntervalSince(askedAt) < 180 }
+    private var awaitingFlag = false
+    private var askedAt = Date.distantPast
     private var question: Question?
     private var card: URL?
     private var camera: String?
@@ -34,7 +38,9 @@ final class CardOffload: ObservableObject {
 
     static func isRequest(_ text: String) -> Bool {
         let n = text.lowercased().folding(options: .diacriticInsensitive, locale: nil)
-        let card = ["cartao", "cartão", "sd", "memory card"].contains { n.contains($0) }
+        // "sd" as a word ("o SD", "SD2"), never inside "ssd".
+        let card = ["cartao", "memory card"].contains { n.contains($0) }
+            || n.range(of: #"(^|[^a-z])sd\d?($|[^a-z])"#, options: .regularExpression) != nil
         let act = ["descarrega", "descarregar", "copia", "copiar", "passa", "passar", "transfere", "backup", "entra no"]
             .contains { n.contains($0) }
         return card && act
@@ -79,7 +85,8 @@ final class CardOffload: ObservableObject {
     /// An answer to the last question.
     func answer(_ text: String) -> String {
         let n = Self.norm(text)
-        if ["cancela", "cancelar", "deixa", "esquece", "para"].contains(where: { n.hasPrefix($0) }) {
+        let cancelWords = ["cancela", "cancelar", "deixa pra la", "deixa para la", "esquece", "para tudo", "parar", "nao quero"]
+        if cancelWords.contains(where: { n.hasPrefix($0) }) || n.trimmingCharacters(in: .punctuationCharacters) == "para" {
             reset(); return "Beleza, cancelei. O cartão ficou como estava."
         }
         switch question {
@@ -116,7 +123,7 @@ final class CardOffload: ObservableObject {
     }
 
     private func ask(_ q: Question) -> String {
-        question = q; awaiting = true
+        question = q; awaitingFlag = true; askedAt = Date()
         switch q {
         case .camera: return "De qual câmera é esse cartão?"
         case .ssd:
@@ -129,7 +136,7 @@ final class CardOffload: ObservableObject {
     }
 
     private func reset() {
-        awaiting = false; question = nil; card = nil; camera = nil; ssd = nil; ssdChoices = []; folder = nil
+        awaitingFlag = false; question = nil; card = nil; camera = nil; ssd = nil; ssdChoices = []; folder = nil
         dual = false; proxies = false; transcribe = false; davinci = false
     }
 
@@ -151,7 +158,7 @@ final class CardOffload: ObservableObject {
 
     private func start() -> String {
         guard let card, let camera, let ssd, let folder else { reset(); return "Faltou alguma informação, me chama de novo." }
-        awaiting = false; question = nil
+        awaitingFlag = false; question = nil
         // Backup duplo: this SSD plus the next one connected.
         var targets = [ssd]
         if dual, let other = ssdChoices.first(where: { $0 != ssd }) { targets.append(other) }
@@ -201,14 +208,17 @@ final class CardOffload: ObservableObject {
     nonisolated static let videoExts: Set<String> = ["mp4", "mov", "mxf", "mts", "m2ts", "avi", "mkv", "insv", "lrv"]
 
     private func run(_ job: Job) async {
-        let files = Self.files(in: job.card)
+        // Walking the card and the SSDs is slow: never on the main thread (the notch would stutter).
+        let card = job.card, dests = job.dests
+        let files = await Task.detached { Self.files(in: card) }.value
         let total = max(1, files.reduce(0) { $0 + $1.size })
-        // Progress: the slowest destination, every second.
+        // Progress: the slowest destination, every 2 seconds.
         let progress = Task { @MainActor in
             while !Task.isCancelled {
-                let done = job.dests.map { Self.files(in: $0).reduce(0) { $0 + $1.size } }.min() ?? 0
+                let done = await Task.detached { dests.map { Self.files(in: $0).reduce(0) { $0 + $1.size } }.min() ?? 0 }.value
+                if Task.isCancelled { break }
                 status = "Copiando cartão \(job.label): \(min(99, Int(Double(done) / Double(total) * 100)))%"
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
         }
         // Every destination at the same time.
@@ -223,11 +233,14 @@ final class CardOffload: ObservableObject {
         // Every file in every copy, same size.
         var problems: [String] = []
         for d in job.dests {
-            let copied = Dictionary(Self.files(in: d).map { ($0.rel, $0.size) }, uniquingKeysWith: { a, _ in a })
+            let list = await Task.detached { Self.files(in: d) }.value
+            let copied = Dictionary(list.map { ($0.rel, $0.size) }, uniquingKeysWith: { a, _ in a })
             let missing = files.filter { copied[$0.rel] != $0.size }.count
             if missing > 0 { problems.append("\(missing) arquivos não conferem em \(Self.shortPath(d))") }
         }
-        let ok = results.allSatisfy { $0 } && problems.isEmpty
+        // The size check is the truth: rsync can complain about attributes on a perfect copy.
+        if !results.allSatisfy({ $0 }) && problems.isEmpty { appendAppLog("nb.log", "[Cloud] offload: rsync warned, sizes all match") }
+        let ok = problems.isEmpty && !files.isEmpty
         let gb = String(format: "%.1f", Double(total) / 1_000_000_000)
         var message = ok
             ? "Copiei \(files.count) \(files.count == 1 ? "arquivo" : "arquivos") (\(gb) GB) do cartão para \(job.shown), tudo conferido."
@@ -235,7 +248,7 @@ final class CardOffload: ObservableObject {
         appendAppLog("nb.log", "[Cloud] offload done ok=\(ok) \(problems)")
 
         if ok, let main = job.dests.first {
-            let videos = Self.files(in: main).filter { Self.videoExts.contains(($0.rel as NSString).pathExtension.lowercased()) }
+            let videos = (await Task.detached { Self.files(in: main) }.value).filter { Self.videoExts.contains(($0.rel as NSString).pathExtension.lowercased()) }
                 .map { main.appendingPathComponent($0.rel) }
             if job.proxies && !videos.isEmpty { message += " " + (await makeProxies(videos, in: main)) }
             if job.transcribe && !videos.isEmpty { message += " " + (await transcribeAll(videos, in: main)) }
@@ -254,11 +267,13 @@ final class CardOffload: ObservableObject {
     nonisolated private static func rsync(_ src: URL, _ dest: URL) -> Bool {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
-        p.arguments = ["-a"] + skip.map { "--exclude=\($0)" } + ["--exclude=._*", src.path + "/", dest.path + "/"]
+        // -rt, not -a: owners and permissions fail on exFAT SSDs and made a good copy look failed.
+        p.arguments = ["-rt", "--modify-window=2"] + skip.map { "--exclude=\($0)" } + ["--exclude=._*", src.path + "/", dest.path + "/"]
         p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
         do { try p.run() } catch { return false }
         p.waitUntilExit()
-        return p.terminationStatus == 0
+        // 23/24: some attribute or a vanished temp file; the size check after the copy decides.
+        return [0, 23, 24].contains(p.terminationStatus)
     }
 
     // MARK: After the copy

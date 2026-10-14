@@ -63,7 +63,17 @@ struct IslandContainer: View {
             if state.mode == .expanded {
                 if greetingActive {
                     // Greeting canvas: fixed 640-wide, centered by offset so x=320 aligns with island center
-                    GreetingCanvasView(state: state)
+                    Group {
+                        #if !APPSTORE
+                        if CloudCharacterKind.current != .mochi {
+                            CloudGreetingView(state: state)   // My Cloud's own opening
+                        } else {
+                            GreetingCanvasView(state: state)
+                        }
+                        #else
+                        GreetingCanvasView(state: state)
+                        #endif
+                    }
                         .frame(width: IslandConst.expandedWidth, height: 150)
                         .offset(x: (islandWidth - IslandConst.expandedWidth) / 2)
                         .clipShape(IslandShape(width: islandWidth, height: islandHeight,
@@ -369,7 +379,7 @@ struct BotPlacement: View {
 }
 
 func botPosition(mode: IslandMode, view: IslandView, islandW: CGFloat, islandH: CGFloat, uploadProgress: Double, hasNotch: Bool = true) -> (CGFloat, CGFloat, CGFloat, Double) {
-    let resting = IslandRestingLayout(width: islandW, height: islandH)
+    let resting = IslandRestingLayout(width: islandW, height: islandH, maxBot: hasNotch ? 20 : 30)
     switch mode {
     case .hidden:
         return hasNotch ? (46, 16, 6, 0)

@@ -43,13 +43,13 @@
 		<true/>
 	</dict>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Pour sauter au terminal, envoyer des mails et piloter Musique et Spotify.</string>
+	<string>O Cloud controla outros apps quando você pede: o Terminal para conectar ao Claude, o navegador para pegar o link do vídeo aberto, e Música e Spotify.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>O Cloud lê a sua agenda para mostrar o próximo compromisso e falar dela no bom dia.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>O Cloud lê a sua agenda para mostrar o próximo compromisso e falar dela no bom dia.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>O Cloud procura um e-mail nos seus contatos quando você pede, por voz, para preparar uma mensagem.</string>
+	<string>O Cloud procura o telefone de um contato quando você pede, por voz, para abrir a conversa no WhatsApp.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>

@@ -33,13 +33,36 @@ enum VoiceSettings {
         set { UserDefaults.standard.set(newValue, forKey: captionEnabledKey) }
     }
 
-    /// Names Cloud answers to after "Ei/Oi/OK/Hey", comma-separated (Settings → Voz → Nome).
+    /// Other spellings of the name, comma-separated (Settings → Assistente → Outras grafias):
+    /// how the Mac writes it when I say it ("Claudio" for Cloud). The companion's own name
+    /// (CloudIdentity.name) always wakes it, whatever is here.
     static var wakeNames: String {
         get { UserDefaults.standard.string(forKey: "voiceWakeNames") ?? WakePhrase.defaultNames }
         set {
             UserDefaults.standard.set(newValue, forKey: "voiceWakeNames")
-            WakePhrase.names = WakePhrase.parseNames(newValue)
+            refreshWakeNames()
         }
+    }
+
+    /// The companion's name first, then the other spellings (no duplicates).
+    static var effectiveWakeNames: [String] {
+        var out: [String] = []
+        for n in [CloudIdentity.name] + wakeNames.split(separator: ",").map({ String($0) }) {
+            let t = n.trimmingCharacters(in: .whitespaces)
+            guard !t.isEmpty, !out.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) else { continue }
+            out.append(t)
+        }
+        return out
+    }
+
+    /// Re-reads the name and spellings into the wake-phrase matcher (after either changes).
+    static func refreshWakeNames() {
+        // The name, its automatic spoken variants ("Task" → Tasque, Tesk…) and my own spellings.
+        let auto = WakePhrase.spellingVariants(CloudIdentity.name)
+        var list = effectiveWakeNames
+        for v in auto where !list.contains(where: { $0.caseInsensitiveCompare(v) == .orderedSame }) { list.append(v) }
+        WakePhrase.names = WakePhrase.parseNames(list.joined(separator: ","))
+        WakePhrase.hintNames = list
     }
 
     /// What Cloud may do with Claude (the quick local actions always work):

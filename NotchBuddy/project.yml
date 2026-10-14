@@ -94,13 +94,13 @@ targets:
         LSUIElement: YES
         NSHighResolutionCapable: YES
         NSSupportsAutomaticGraphicsSwitching: YES
-        NSAppleEventsUsageDescription: "Pour sauter au terminal, envoyer des mails et piloter Musique et Spotify."
+        NSAppleEventsUsageDescription: "O Cloud controla outros apps quando você pede: o Terminal para conectar ao Claude, o navegador para pegar o link do vídeo aberto, e Música e Spotify."
         NSMicrophoneUsageDescription: "O Cloud usa o microfone para ouvir quando você chama \"Ei Cloud\"."
         NSSpeechRecognitionUsageDescription: "O Cloud transforma sua voz em texto no próprio Mac para entender seus comandos."
         NSAccessibilityUsageDescription: "Pour lire le titre de la fenêtre active et l'attacher comme contexte."
         NSCalendarsFullAccessUsageDescription: "O Cloud lê a sua agenda para mostrar o próximo compromisso e falar dela no bom dia."
         NSCalendarsUsageDescription: "O Cloud lê a sua agenda para mostrar o próximo compromisso e falar dela no bom dia."
-        NSContactsUsageDescription: "O Cloud procura um e-mail nos seus contatos quando você pede, por voz, para preparar uma mensagem."
+        NSContactsUsageDescription: "O Cloud procura o telefone de um contato quando você pede, por voz, para abrir a conversa no WhatsApp."
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         CFBundleLocalizations:

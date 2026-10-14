@@ -16,26 +16,41 @@ enum FileTranscriber {
         req.shouldReportPartialResults = true
         req.addsPunctuation = true
         return await withCheckedContinuation { (cont: CheckedContinuation<String?, Never>) in
-            var finished = false
-            var committed = "", current = ""
-            func finish() {
-                guard !finished else { return }
-                finished = true
-                let text = (committed + " " + current).trimmingCharacters(in: .whitespaces)
+            // The recognizer calls back on its own queue: the state is behind a lock, and a
+            // time limit ends it even if the recognizer never answers (the card job would hang).
+            final class State: @unchecked Sendable {
+                let lock = NSLock()
+                var finished = false
+                var committed = "", current = ""
+            }
+            let st = State()
+            let finish: @Sendable () -> Void = {
+                st.lock.lock()
+                guard !st.finished else { st.lock.unlock(); return }
+                st.finished = true
+                let text = (st.committed + " " + st.current).trimmingCharacters(in: .whitespaces)
+                st.lock.unlock()
                 cont.resume(returning: text.isEmpty ? nil : text)
             }
-            r.recognitionTask(with: req) { result, error in
+            let task = r.recognitionTask(with: req) { result, error in
                 if let result {
                     let text = result.bestTranscription.formattedString
+                    st.lock.lock()
                     // A new segment: the text no longer continues the previous one.
-                    if !current.isEmpty && !text.hasPrefix(String(current.prefix(max(1, min(current.count, text.count) / 2)))) {
-                        committed += (committed.isEmpty ? "" : " ") + current
+                    let cur = st.current
+                    if !cur.isEmpty && !text.hasPrefix(String(cur.prefix(max(1, min(cur.count, text.count) / 2)))) {
+                        st.committed += (st.committed.isEmpty ? "" : " ") + cur
                     }
-                    current = text
+                    st.current = text
+                    st.lock.unlock()
                     if result.isFinal { finish() }
                 } else if error != nil {
                     finish()
                 }
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 900) {
+                task.cancel()
+                finish()
             }
         }
     }

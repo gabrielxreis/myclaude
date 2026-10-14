@@ -28,6 +28,13 @@ xcodebuild -scheme NotchBuddy -configuration Debug -derivedDataPath build build 
 /usr/libexec/PlistBuddy -c "Add :MyCloudBuildDate string $(date -u +%Y-%m-%dT%H:%M:%SZ)" "$APP/Contents/Info.plist" 2>/dev/null \
   || /usr/libexec/PlistBuddy -c "Set :MyCloudBuildDate $(date -u +%Y-%m-%dT%H:%M:%SZ)" "$APP/Contents/Info.plist"
 
+# Personal build (this private fork, not the public myclaude copy): the auto-update must never
+# swap it for the public release, which has no Mochi and no Coucou sounds.
+if [ "${MYCLOUD_PUBLIC:-}" != "1" ] && git -C .. remote get-url origin 2>/dev/null | grep -qi coucou; then
+  /usr/libexec/PlistBuddy -c "Add :MyCloudPersonal bool true" "$APP/Contents/Info.plist" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Set :MyCloudPersonal true" "$APP/Contents/Info.plist"
+fi
+
 # Public build: Coucou's sounds stay out of the bundle (My Cloud's own are in cloud-sounds).
 rm -rf "$APP/Contents/Resources/sounds"
 

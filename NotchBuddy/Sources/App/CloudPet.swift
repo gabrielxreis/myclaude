@@ -118,6 +118,7 @@ final class CloudPet: ObservableObject {
 
     func mood(_ state: AppState) -> Mood {
         if state.pendingApproval != nil { return .preocupado }
+        if sleepingByHand { return .sonolento }
         if energia(state) < 15 { return .cansado }
         if foco(state) > 0 || CardOffload.shared.status != nil { return .focado }
         let hour = Calendar.current.component(.hour, from: Date())
@@ -206,7 +207,10 @@ struct CloudPetCardView: View {
             .padding(.top, 9)
             .padding(.leading, 108)
             .padding(.trailing, 34)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Tapping anywhere on the card (the character side included) opens Cloud up close.
+            .contentShape(Rectangle())
+            .onTapGesture { CloudPetWindow.shared.show() }
         }
         .onChange(of: state.tasks.filter { $0.state == .finished }.count) { old, new in
             if new > old { pet.taskFinished() }

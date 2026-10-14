@@ -36,9 +36,77 @@ enum CloudLocalActions {
         return out.map { $0.joined(separator: " ") }.filter { !$0.isEmpty }
     }
 
+    // MARK: Commands inside natural speech
+
+    /// Verbs that start a command wherever they are ("eu quero que você pesquise…").
+    static let commandVerbs: Set<String> = [
+        "abre", "abra", "abrir", "fecha", "feche", "fechar", "entra", "entre", "entrar", "acessa", "acesse", "acessar",
+        "pesquisa", "pesquise", "pesquisar", "procura", "procure", "procurar", "busca", "busque", "buscar",
+        "clica", "clique", "clicar", "aperta", "aperte", "apertar", "digita", "digite", "digitar", "escreve", "escreva",
+        "coloca", "coloque", "colocar", "bota", "bote", "toca", "toque", "tocar", "poe", "rola", "role", "rolar",
+        "volta", "volte", "voltar", "recarrega", "recarregue", "copia", "copie", "cola", "cole", "pausa", "pause",
+        "seleciona", "selecione", "manda", "mande", "inicia", "inicie", "minimiza", "assiste", "vai",
+    ]
+    private static let joiners: Set<String> = ["e", "depois", "entao", "ai", "que", "voce", "tambem", "e", "dai"]
+    private static let fillers: [String] = [
+        "eu quero que voce", "quero que voce", "eu queria que voce", "queria que voce", "preciso que voce",
+        "eu preciso que voce", "faz o seguinte", "faca o seguinte", "voce pode", "voce consegue", "pode", "consegue",
+        "por favor", "pra mim", "para mim", "agora", "la", "ai", "entao", "depois", "e", "tambem", "dai",
+    ]
+
+    /// Splits natural speech into commands: each starts at a command verb and runs until the next
+    /// one. Inside a search, a typed text or a message, a verb only starts a new command after
+    /// "e / depois / que / você" (the query may contain verbs). Leading filler is dropped.
+    static func commands(_ text: String) -> [String] { commandsWithStart(text).map(\.text) }
+
+    /// The same, each with the word index where it starts (-1 for what came before the first verb):
+    /// a stable key while the sentence is still growing.
+    static func commandsWithStart(_ text: String) -> [(start: Int, text: String)] {
+        let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        let norms = words.map { normalise($0) }
+        var starts: [Int] = []
+        var freeText = false   // the current command takes any words (search, typing, message)
+        for (i, w) in norms.enumerated() where commandVerbs.contains(w) {
+            if w == "vai", !(i + 1 < norms.count && ["no", "na", "pro", "pra", "para", "ao"].contains(norms[i + 1])) { continue }
+            let prev = i > 0 ? norms[i - 1] : ""
+            let afterPause = i > 0 && words[i - 1].last.map { ",.;!?".contains($0) } == true
+            if starts.isEmpty || !freeText || joiners.contains(prev) || afterPause {
+                starts.append(i)
+                freeText = searchVerbs.contains(w) || ["digita", "digite", "escreve", "escreva", "manda", "mande"].contains(w)
+            } else if ["dizendo", "falando"].contains(prev) { continue }
+        }
+        guard let first = starts.first else { return [(-1, text)] }
+        var out: [(start: Int, text: String)] = []
+        // What came before the first verb, when it says something (not just "faz o seguinte").
+        let pre = clean(Array(words[..<first]))
+        if pre.split(separator: " ").count >= 3 { out.append((-1, pre)) }
+        for (k, st) in starts.enumerated() {
+            let end = k + 1 < starts.count ? starts[k + 1] : words.count
+            let c = clean(Array(words[st..<end]))
+            if !c.isEmpty { out.append((st, c)) }
+        }
+        return out
+    }
+
+    /// Without filler at the ends ("…e eu quero que você" → "…").
+    private static func clean(_ ws: [String]) -> String {
+        var w = ws
+        var changed = true
+        while changed && !w.isEmpty {
+            changed = false
+            for f in fillers {
+                let fw = f.split(separator: " ").map(String.init)
+                if w.count >= fw.count, w.prefix(fw.count).map(normalise) == fw { w.removeFirst(fw.count); changed = true }
+                if w.count >= fw.count, w.suffix(fw.count).map(normalise) == fw { w.removeLast(fw.count); changed = true }
+            }
+        }
+        return w.joined(separator: " ").trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
+    }
+
     /// Runs the clauses from `skip` on, in order, until one needs Claude. Returns what Cloud
     /// says for each local one and the rest of the request for Claude (nil when all were local).
-    static func process(_ text: String, skip: Int = 0, expanded: Bool = false) -> (replies: [String], rest: String?) {
+    static func process(_ text: String, early: [Int: Bool] = [:], expanded: Bool = false) -> (replies: [String], rest: String?) {
+        let skip = early.isEmpty ? 0 : 1
         // Defining a routine or a trigger comes first ("quando eu disser X, ..." contains X).
         if let r = VoiceSetup.trigger(text) ?? VoiceSetup.routine(text) { return ([r], nil) }
         // A trigger of mine ("modo edição") stands for its request, once (no chains).
@@ -58,26 +126,38 @@ enum CloudLocalActions {
         if CardOffload.isRequest(text) { return ([CardOffload.shared.begin(text)], nil) }
         if CloudTimers.isRequest(text) { return ([CloudTimers.shared.handle(text)], nil) }
         if VideoIdea.isRequest(text) { return ([VideoIdea.start(text)], nil) }
-        let cls = clauses(text)
+        // Every command that runs here runs now (some already did while I was talking); only
+        // the others go to Claude, together. One that needs Claude no longer holds the rest.
+        let cmds = commandsWithStart(text)
         var replies: [String] = []
-        var i = skip
-        while i < cls.count, let r = handle(cls[i]) { replies.append(r); i += 1 }
-        let rest = i < cls.count ? cls[i...].joined(separator: " e ") : nil
-        return (replies, rest)
+        var forClaude: [String] = []
+        for (start, c) in cmds {
+            if early[start] == true { continue }
+            if let r = handle(c) { replies.append(r) } else { forClaude.append(c) }
+        }
+        _ = skip
+        return (replies, forClaude.isEmpty ? nil : forClaude.joined(separator: " e "))
     }
 
     /// One request, when it is local (open/quit an app, search the web, a WhatsApp chat); nil otherwise.
     static func handle(_ text: String) -> String? {
         if let r = whatsApp(text) { return r }
+        // On the screen and on the web: click, type, keys, scroll, "entra no YouTube e pesquisa…".
+        if let r = ScreenActions.handle(text) { return r }
         let words = normalise(text).split(separator: " ").map(String.init)
         guard let (verb, rest) = findVerb(words) else { return nil }
         if verb == .search { return search(text) }
         let query = stripFiller(rest).joined(separator: " ")
         guard !query.isEmpty else { return nil }
         if verb == .open, let r = openFolder(rest) ?? openSiteIfNamed(rest) { return r }
-        guard let app = findApp(query) else {
+        guard var app = findApp(query) else {
             if verb == .open, let r = openSite(query) { return r }
             return verb == .open ? nil : "Não achei nenhum app aberto com esse nome."   // Claude may know better
+        }
+        var swapped = false
+        if verb == .open, Bundle(url: app.url)?.bundleIdentifier == "com.apple.Safari", let c = chromiumBrowser {
+            app = App(name: FileManager.default.displayName(atPath: c.path).replacingOccurrences(of: ".app", with: ""), url: c)
+            swapped = true
         }
         switch verb {
         case .open:
@@ -86,7 +166,7 @@ enum CloudLocalActions {
             lastOpenedApp = squash(app.name)
             CloudMissions.shared.record(.app)
             appendAppLog("nb.log", "[Cloud] local open \(app.name)")
-            return "Abrindo o \(app.name)."
+            return swapped ? "Abrindo o \(app.name) no lugar do Safari, que tem limitações." : "Abrindo o \(app.name)."
         case .quit:
             guard let running = NSWorkspace.shared.runningApplications.first(where: { $0.bundleURL == app.url })
             else { return "O \(app.name) não está aberto." }
@@ -174,7 +254,7 @@ enum CloudLocalActions {
             link = "https://" + n.replacingOccurrences(of: " ", with: ".")
         }
         guard let link, let url = URL(string: link) else { return nil }
-        if let browser = lastBrowser {
+        if let browser = webBrowser {
             NSWorkspace.shared.open([url], withApplicationAt: browser, configuration: .init(), completionHandler: nil)
         } else {
             NSWorkspace.shared.open(url)
@@ -224,7 +304,7 @@ enum CloudLocalActions {
             return "Não achei o telefone de \(name) nos seus Contatos."
         case .found(let contact, let phone):
             var link = "whatsapp://send?phone=\(phone)"
-            if let message, let enc = message.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            if let message, let enc = Self.queryEncoded(message) {
                 link += "&text=\(enc)"
             }
             guard let url = URL(string: link) else { return nil }
@@ -258,11 +338,9 @@ enum CloudLocalActions {
         while let l = q.last, ["mim", "favor", "google", "internet"].contains(normalise(l)) { q.removeLast() }
         let query = q.joined(separator: " ").trimmingCharacters(in: .punctuationCharacters)
         guard !query.isEmpty,
-              let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let encoded = Self.queryEncoded(query),
               let url = URL(string: "https://www.google.com/search?q=\(encoded)") else { return nil }
-        let front = NSWorkspace.shared.frontmostApplication?.bundleURL
-        let browser = lastBrowser ?? front.flatMap { isBrowser($0) ? $0 : nil }
-        if let browser {
+        if let browser = webBrowser {
             NSWorkspace.shared.open([url], withApplicationAt: browser, configuration: .init(), completionHandler: nil)
         } else {
             NSWorkspace.shared.open(url)
@@ -275,6 +353,7 @@ enum CloudLocalActions {
     /// True while I'm still talking when the command can only mean one app: the name matches
     /// exactly, or only one installed app contains what was said (4+ letters).
     static func isSureEarly(_ text: String) -> Bool {
+        if ScreenActions.isSure(text) { return true }
         let words = normalise(text).split(separator: " ").map(String.init)
         guard let (verb, rest) = findVerb(words), verb != .search else { return false }   // a search ends with the sentence
         let q = squash(stripFiller(rest).joined(separator: " "))
@@ -297,7 +376,41 @@ enum CloudLocalActions {
 
     private static func isVerb(_ w: String) -> Bool {
         openVerbs.contains(w) || quitVerbs.contains(w) || searchVerbs.contains(w) || chatVerbs.contains(w)
+            || ScreenActions.verbs.contains(w)
     }
+
+    /// Chrome or one of its family, first one installed: Safari blocks too much (pages hidden from
+    /// automation, JavaScript locked), so the web always goes to a Chromium browser when there is one.
+    static let chromiumIDs = ["com.google.Chrome", "com.brave.Browser", "com.microsoft.edgemac",
+                              "company.thebrowser.Browser", "org.chromium.Chromium", "com.vivaldi.Vivaldi", "com.operasoftware.Opera"]
+
+    static var chromiumBrowser: URL? {
+        // The one already running first, then the first installed.
+        let running = NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier)
+        for id in chromiumIDs where running.contains(id) {
+            if let u = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) { return u }
+        }
+        return chromiumIDs.lazy.compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }.first
+    }
+
+    /// The browser for the web: the last Chromium one I used, else any Chromium, else what I had.
+    static var webBrowser: URL? {
+        if let l = lastBrowser, let id = Bundle(url: l)?.bundleIdentifier, chromiumIDs.contains(id) { return l }
+        if let c = chromiumBrowser { return c }
+        let front = NSWorkspace.shared.frontmostApplication?.bundleURL
+        return lastBrowser ?? front.flatMap { isBrowser($0) ? $0 : nil }
+    }
+
+    /// Opens a link in the web browser (Chrome family first), or the default.
+    static func openInBrowser(_ url: URL) {
+        if let browser = webBrowser {
+            NSWorkspace.shared.open([url], withApplicationAt: browser, configuration: .init(), completionHandler: nil)
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    static func isBrowserApp(_ url: URL?) -> Bool { url.map(isBrowser) ?? false }
 
     private static let openVerbs: Set<String> = ["abre", "abra", "abrir", "abri", "abrindo", "open", "inicia", "iniciar"]
     private static let quitVerbs: Set<String> = ["fecha", "feche", "fechar", "encerra", "encerrar", "quit"]
@@ -363,7 +476,39 @@ enum CloudLocalActions {
         return shown == file ? [App(name: file, url: url)] : [App(name: shown, url: url), App(name: file, url: url)]
     }
 
+    /// Words the recognizer should expect (it runs in Portuguese): the apps installed here, the
+    /// sites Cloud knows and common English words of apps and sites, so "abre o Final Cut" or
+    /// "clica em Download" come out as said instead of a Portuguese look-alike.
+    static func recognizerHints() -> [String] {
+        let apps = installedApps().map(\.name)
+            .filter { $0.count >= 3 && $0.split(separator: " ").count <= 3 && !$0.lowercased().contains("uninstall") }
+        let sites = ScreenActions.sites.values.map(\.name)
+        let english = ["YouTube", "Chrome", "Google", "Spotify", "WhatsApp", "Instagram", "TikTok", "Netflix", "Gmail",
+                       "play", "pause", "download", "upload", "login", "logout", "settings", "share", "like", "subscribe",
+                       "filter", "filters", "search", "home", "next", "skip", "shorts", "reels", "story", "stories",
+                       "feed", "post", "link", "email", "save", "export", "render", "timeline", "preset", "template"]
+        var seen = Set<String>(), out: [String] = []
+        for w in english + sites + apps where seen.insert(w.lowercased()).inserted { out.append(w) }
+        return Array(out.prefix(160))
+    }
+
+    /// A value for a URL query: everything but letters, digits and -._~ is escaped, so "&", "+",
+    /// "=" and "#" in what was said can't cut the query short.
+    static func queryEncoded(_ s: String) -> String? {
+        s.addingPercentEncoding(withAllowedCharacters: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~")))
+    }
+
+    /// Cached for a minute: while I'm talking, every partial result asks for the app list.
+    private static var appsCache: (list: [App], at: Date)?
+
     private static func installedApps() -> [App] {
+        if let c = appsCache, Date().timeIntervalSince(c.at) < 60 { return c.list }
+        let list = scanInstalledApps()
+        appsCache = (list, Date())
+        return list
+    }
+
+    private static func scanInstalledApps() -> [App] {
         let fm = FileManager.default
         let dirs = ["/Applications", "/Applications/Utilities", "/System/Applications",
                     "/System/Applications/Utilities", fm.homeDirectoryForCurrentUser.path + "/Applications"]

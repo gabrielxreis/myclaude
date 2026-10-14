@@ -26,6 +26,7 @@
 * [O QUE ELE FAZ](#o-que-ele-faz)
     * [Voz e conversa contínua](#voz-e-conversa-continua)
     * [Ações instantâneas](#acoes-instantaneas)
+    * [Usar qualquer app](#usar-qualquer-app)
     * [Cartão de memória](#cartao-de-memoria)
     * [Chat no notch e histórico](#chat-no-notch-e-historico)
     * [Perguntas pelo ChatGPT](#perguntas-pelo-chatgpt)
@@ -33,6 +34,7 @@
 * [PERSONAGENS](#personagens)
 * [INSTALAÇÃO](#instalacao)
 * [CONFIGURAÇÃO](#configuracao)
+    * [Permissões](#permissoes)
     * [O que o Cloud pode fazer](#o-que-o-cloud-pode-fazer)
 * [PRIVACIDADE](#privacidade)
 * [DESENVOLVIMENTO](#desenvolvimento)
@@ -58,8 +60,12 @@ Na primeira vez que abre, aparece um ovo: você dá um nome ao seu companheiro, 
 <a id="voz-e-conversa-continua"></a>
 ## Voz e conversa contínua
 
-* **Chamado pelo nome.** "Ei Cloud", "Oi Cloud", "OK Cloud" ou "Hey Cloud", ou qualquer nome que você configurar ("Cláudio", "Jarvis"...). Ele entende variações que o Mac costuma escrever ("Claudio", "iCloud") e nunca acorda quando você só fala *do* Claude numa frase.
-* **Faz enquanto você fala.** "Abre o Chrome e pesquisa animais da Antártida": o Chrome abre assim que você diz "Chrome", e a pesquisa sai quando a frase termina.
+* **Chamado pelo nome que você escolher.** Em **Ajustes → Assistente** você dá o nome, e o chamado é qualquer saudação + o nome: **Ei, Hey, Oi, OK, Olá, Alô, Fala, Opa ou E aí**. O nome sozinho nunca acorda, então ele não reage quando você só fala *dele* numa frase.
+* **Entende o nome do jeito que o Mac escreve.** Ao digitar o nome, ele cria sozinho as variações faladas (Task → Tasque, Tesk…; Cloud → Claudio, Clau…) e compara pelo **som**, não só pelas letras. Se mesmo assim errar, toque em **Ensinar o nome**: você diz o chamado algumas vezes e ele aprende como o Mac escreve.
+* **Faz enquanto você fala, do seu jeito.** "Faz o seguinte: abre o YouTube no Chrome, eu quero que você pesquise carros e coloca o mais assistido": ele acha os comandos no meio da fala (abra, pesquise, clique, coloque…) e cada um roda assim que você começa o próximo. O que for instantâneo roda na hora; só o resto vai para o Claude.
+* **Palavras em inglês.** Nomes dos apps instalados, dos sites e palavras de interface ("download", "settings", "filter"…) vão como dica para o reconhecedor, que então escreve como você falou.
+* **Quando não entende, pergunta.** Faz cara de dúvida, mostra "Não entendi, pode repetir?" e volta a ouvir sozinho.
+* **Tocar nele para.** Enquanto ele escuta, um toque no bichinho interrompe.
 * **Continua ouvindo.** Depois de cada pedido ele segue escutando, sem novo chamado, até você dizer "obrigado", "valeu", "pode parar" ou ficar uns segundos em silêncio.
 * **Sons e animação.** Um "tink" quando começa a ouvir, um "pop" quando termina, e o personagem pula e olha para você enquanto escuta.
 * **Só texto ou com voz.** Por padrão a resposta aparece no notch. Se quiser que ele fale, escolha a voz do Mac ou a do ElevenLabs.
@@ -75,8 +81,20 @@ Rodam no próprio app, na hora, sem gastar o plano:
 | "abre a pasta Downloads", "abre a pasta Clientes" | abre a pasta no Finder |
 | "abre o YouTube", "abre o site globo.com" | abre o site no navegador |
 | "pesquisa receita de bolo" | pesquisa no Google |
+| "entra no YouTube e pesquisa carros", "pesquisa fone na Amazon" | pesquisa **dentro do site** (YouTube, Amazon, Mercado Livre, Wikipédia, Spotify, Maps…), na mesma aba |
+| "coloca o vídeo mais assistido de carros" | busca no YouTube por visualizações e abre o primeiro |
+| "clica em Filtros", "clica no primeiro vídeo" | clica no botão ou link com esse nome, em qualquer app ou site |
+| "digita bom dia", "aperta enter", "aperta esc" | digita e aperta teclas no app da frente |
+| "volta", "recarrega", "rola pra baixo", "nova aba", "fecha a aba", "copia", "cola", "pausa" | atalhos de navegação, abas, edição e vídeo |
 | "abre a conversa com a Maria no WhatsApp" | abre a conversa (telefone dos Contatos) |
 | "manda mensagem pro João no WhatsApp dizendo que chego às 8" | deixa a mensagem escrita; **você** aperta Enter |
+
+**Web sempre no Chrome** (ou Brave, Edge, Arc, Chromium, Vivaldi, Opera): o Safari esconde as páginas da automação, então "abre o Safari" abre o Chrome. Para clicar **dentro** dos sites, ligue uma vez no Chrome: **Visualização → Desenvolvedor → Permitir o JavaScript do Eventos da Apple**.
+
+<a id="usar-qualquer-app"></a>
+## Usar qualquer app
+
+Para o que não é uma ação instantânea ("no Premiere, exporta a sequência em H.264", "no Finder, renomeia a pasta X"), o Claude pode **ver a tela e usar qualquer app**: clicar, digitar, usar menus e conferir o resultado, pelo [Peekaboo](https://github.com/openclaw/Peekaboo) (código aberto, MIT). Liga em **Ajustes → Assistente → Usar qualquer app** (o instalador já deixa pronto se o Mac tiver Node 22+). No modo Só consultar ele só olha. Antes de apagar, enviar, publicar, comprar ou mudar ajustes do Mac, sempre pergunta.
 
 <a id="cartao-de-memoria"></a>
 ## Cartão de memória
@@ -109,12 +127,12 @@ Perguntas e pesquisas ("quem ganhou o jogo?", "o que é...", "quanto custa...") 
 <a id="skills-ogab-e-ojhon"></a>
 ## Skills: /ogab e /ojhon
 
-O My Cloud vem com duas skills do Claude Code, instaladas junto:
+O My Cloud conversa com duas skills do Claude Code, que são instaladas à parte (cada uma no seu repositório, se você quiser):
 
 * **[/ogab](https://github.com/gabrielxreis/ogab)**: editor de vídeo (DaVinci, Premiere, After Effects, legenda, motions, roteiro, Instagram).
 * **[/ojhon](https://github.com/gabrielxreis/ojhon)**: gestor de tráfego (auditoria de anúncios, plano de mídia, criativos, relatórios).
 
-As duas aparecem como atalhos no notch, e pedidos de vídeo e de anúncio vão direto para elas. Você pode fixar qualquer outra skill instalada como atalho, ou pedir ao Cloud: "cria uma ação rápida que...".
+Se estiverem instaladas, as duas aparecem como atalhos no notch, e pedidos de vídeo e de anúncio vão direto para elas. Você pode fixar qualquer outra skill instalada como atalho, ou pedir ao Cloud: "cria uma ação rápida que...".
 
 <a id="personagens"></a>
 # PERSONAGENS
@@ -142,7 +160,11 @@ Doze bichinhos, cada um com suas manias, todos com os mesmos humores (ouvindo, p
 | **Gatinho de nuvem** | orelhas em pé para ouvir, rabinho, rastro de arco-íris |
 | **Bolha de sabão** | furta-cor, estoura e se forma de novo quando se assusta |
 
-**Tamagotchi.** O card do notch mostra o nome, o humor do momento e o nível (Ovo, Filhote, Jovem, Adulto, Mestre), com três barras: **Humor** (sobe quando vocês interagem), **Energia** (o que resta do seu plano do Claude) e **Foco** (agentes trabalhando). Ele também vê em qual app você está e sugere algo que consegue fazer ali.
+**Tamagotchi.** O card do notch mostra o nome, o humor do momento e o nível (Ovo, Filhote, Jovem, Adulto, Mestre), com as barras **Humor** (sobe quando vocês interagem), **Energia** (o que resta do seu plano do Claude) e **Foco** (agentes trabalhando). Ele também vê em qual app você está e sugere algo que consegue fazer ali. **Toque no card** e ele aparece grande numa janela, com a barra de **Fome** e os cuidados: **lanche** (a comida cai e ele mastiga), **brincar**, **carinho** (toque nele), **dormir / acordar**, conversar e missões.
+
+**Toque e botão direito.** Um toque no bichinho e ele leva um susto e pula (três toques rápidos: fica tonto). Com o botão direito, um menu para trocar a skin e o personagem.
+
+**Novidades.** Depois de uma atualização ele fica feliz e pergunta, num balão embaixo do notch: "Quer ver o que eu sei fazer de novo?". Tocando, abre a lista animada do que mudou.
 
 **Skins.** Padrão, cachecol, fone, boina de diretor, óculos escuros e coroa, ou **automática**: cachecol no frio, óculos no calor, garoa quando chove (clima da sua cidade pelo Open-Meteo, grátis) e roupa de festa no Natal, Ano Novo, Carnaval, Páscoa, Festa Junina, Dia das Crianças e Halloween.
 
@@ -151,31 +173,43 @@ Doze bichinhos, cada um com suas manias, todos com os mesmos humores (ouvindo, p
 
 Dois cliques em **`Instalar My Cloud.command`**. Ele:
 
-1. Instala o **Claude Code** (se faltar) e confere o login da sua assinatura.
-2. Instala ou atualiza a **/ogab** e a **/ojhon**.
-3. Instala o **RustDesk**, para acessar o Mac pelo celular.
-4. Baixa o **app pronto** (última release), apaga a versão antiga e instala em **Aplicativos**. Não precisa de Xcode.
+1. Confere o **Claude Code** (instala se faltar) e o login da sua assinatura, porque o My Cloud funciona por ele.
+2. Baixa o **app pronto** (última release), apaga a versão antiga e instala em **Aplicativos**. Não precisa de Xcode.
+3. Adiciona o **Peekaboo** ao Claude Code (usar qualquer app), se o Mac tiver Node 22+.
+4. Abre o My Cloud.
 
-Depois, no próprio app (ícone na barra de menu → Ajustes):
+Ele instala só o My Cloud: nada de skills nem outros apps junto.
 
-* **Voz:** aceite o microfone e o reconhecimento de fala quando o Mac pedir.
-* **Agentes:** "Instalar hooks" do Claude Code, para o Cloud ver as suas sessões.
+**Na primeira abertura**, depois do ovo, ele pede as permissões **uma depois da outra** (microfone, fala, contatos, calendário, controlar o Chrome e o Terminal) e no fim mostra só o que você precisa ligar à mão:
+
+* **Acessibilidade** e **Gravação de tela** para o My Cloud, nos Ajustes do Sistema (depois, reabra o app).
+* **Chrome:** Visualização → Desenvolvedor → Permitir o JavaScript do Eventos da Apple.
+* **Claude:** em Ajustes → Claude, **Conectar ao Claude** faz o que faltar (login, sessões no notch, uso do plano) e mostra antes de gravar qualquer coisa.
 * **ChatGPT (opcional):** `brew install --cask codex` e `codex login` com a sua conta.
 
-**Atualização automática.** Uma vez por dia o My Cloud confere as releases deste repositório: se tiver versão nova, ele baixa o app pronto, troca a versão em Aplicativos e avisa. A /ogab e a /ojhon são atualizadas junto. Dá para desligar ou verificar na hora em **Ajustes → Geral → Atualizações**.
+**Atualização automática.** Uma vez por dia o My Cloud confere as releases deste repositório: se tiver versão nova, ele baixa o app pronto, troca a versão em Aplicativos e avisa. Só o app é atualizado. Dá para desligar ou verificar na hora em **Ajustes → Geral → Atualizações**.
 
 **Requisitos:** macOS 15 ou mais novo e assinatura do Claude (Pro ou Max). Xcode só para quem quiser compilar.
 
-> Use o **instalador**. Se você baixar o `MyCloud.zip` pelo navegador, o macOS pode avisar que o desenvolvedor não foi identificado (o app ainda não é notarizado pela Apple); nesse caso, botão direito no app → Abrir. Para o cartão de memória com proxies e transcrição: ffmpeg e Whisper local, que a /ogab instala.
+> Use o **instalador**. Se você baixar o `MyCloud.zip` pelo navegador, o macOS pode avisar que o desenvolvedor não foi identificado (o app ainda não é notarizado pela Apple); nesse caso, botão direito no app → Abrir. Para o cartão de memória com proxies e transcrição: ffmpeg e Whisper local (a /ogab instala os dois, se você usar).
 
 <a id="configuracao"></a>
 # CONFIGURAÇÃO
 
 Tudo em **Ajustes**:
 
-* **Geral → Personagem:** o bichinho, a skin, a cidade do clima e os sons.
-* **Voz:** nome do assistente (vários, separados por vírgula), microfone, idioma, quem responde perguntas (ChatGPT ou Claude) e se ele fala ou só escreve.
-* **Agentes:** hooks do Claude Code e as skills /ogab e /ojhon.
+* **Claude:** conexão (Claude Code, conta, sessões no notch, uso do plano), o botão Conectar ao Claude e o que aparece quando uma tarefa termina.
+* **Geral:** atualizações, comportamento da ilha, tela (e o tamanho em Mac sem notch), atalho e idioma.
+* **Personagem:** o bichinho, a skin, a cidade do clima, os sons e os widgets.
+* **Assistente:** o nome (com as variações e o **Ensinar o nome**), o que o Cloud pode fazer, usar qualquer app (Peekaboo), quem responde perguntas e os modelos do Claude.
+* **Voz e microfone:** o microfone (ou o padrão do Mac, com aviso se o escolhido estiver desconectado), o idioma e se ele fala ou só escreve.
+* **Permissões:** o que já está permitido e o que falta.
+* **Dados:** pasta de dados, log e apagar o histórico.
+
+<a id="permissoes"></a>
+## Permissões
+
+A aba **Permissões** lista tudo o que o My Cloud usa, para que serve e se está liberado: microfone, reconhecimento de fala, acessibilidade, gravação de tela, contatos, calendário, controlar Terminal, Chrome e Safari, e o JavaScript do Chrome. Cada item tem **Permitir** (pede na hora) ou **Abrir Ajustes** (vai direto ao lugar certo), e **Configurar tudo agora** refaz a sequência. Quando o macOS só libera depois de reabrir, aparece o botão **Reabrir o My Cloud**.
 
 <a id="o-que-o-cloud-pode-fazer"></a>
 ## O que o Cloud pode fazer

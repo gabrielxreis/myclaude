@@ -65,6 +65,8 @@ final class VoiceEngine: ObservableObject {
     // Backoff / loop prevention
     private var backoff           = WakeWindowBackoff()
     private var windowOpenedAt:   Date = .distantPast
+    /// Set while a wake window waits for its last words after the speech ended.
+    private var drainToken:       UUID?
     private var consecErrorStreak = 0
     private static let maxConsecErrors = 3
 
@@ -111,7 +113,7 @@ final class VoiceEngine: ObservableObject {
 
     private init() {
         lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
-        WakePhrase.names = WakePhrase.parseNames(VoiceSettings.wakeNames)
+        VoiceSettings.refreshWakeNames()
         let buildHash = Bundle.main.object(forInfoDictionaryKey: "CoucouGitHash") as? String ?? "unknown"
         appendAppLog("nb.log", "[Voice] build \(buildHash)")
         observeSystemEvents()
@@ -233,7 +235,7 @@ final class VoiceEngine: ObservableObject {
 
         let a = VoiceAudio()
         let s = WakeSpotter()
-        s.additionalContextualStrings = PillCatalog.available.map { $0.name }
+        s.additionalContextualStrings = PillCatalog.available.map { $0.name } + CloudLocalActions.recognizerHints()
 
         // ── Spotter callbacks ─────────────────────────────────────────────────
 
@@ -304,6 +306,14 @@ final class VoiceEngine: ObservableObject {
                 return
             }
             appendAppLog("nb.log", "[Voice] vad start")
+            // Still waiting for the last window's words: close it now, the new speech gets a window.
+            if self.drainToken != nil {
+                self.drainToken = nil
+                if s.isDraining && !s.isInCommandPhase {
+                    let st = s.endWindow()
+                    appendAppLog("nb.log", "[Voice] window close (new speech) \(Self.describe(st))")
+                }
+            }
             voiceSegmentActive = true
             backoff.reset()
             consecErrorStreak  = 0
@@ -318,10 +328,20 @@ final class VoiceEngine: ObservableObject {
             firstUnavailableAt  = nil
             wakeWindowWork?.cancel(); wakeWindowWork = nil
             if !isListeningForCommand && !s.isInCommandPhase {
+                // Let the recognizer finish ("Ei Cloud" often arrives ~1 s after the audio),
+                // then close. A new voice start before that closes it at once.
                 let elapsed = Date().timeIntervalSince(self.windowOpenedAt)
-                let st = s.endWindow()
-                appendAppLog("nb.log", "[Voice] window close \(Self.describe(st))")
-                self.checkDeafRecognizer(st, elapsed: elapsed)
+                s.finishAudio()
+                let token = UUID()
+                self.drainToken = token
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                    guard let self, self.drainToken == token else { return }
+                    self.drainToken = nil
+                    guard !self.isListeningForCommand, !s.isInCommandPhase else { return }
+                    let st = s.endWindow()
+                    appendAppLog("nb.log", "[Voice] window close \(Self.describe(st))")
+                    self.checkDeafRecognizer(st, elapsed: elapsed)
+                }
             }
         }
 
@@ -702,28 +722,33 @@ final class VoiceEngine: ObservableObject {
     // (followed by the next one, or an app name that can only mean one app) runs now, while
     // I keep talking. The rest is handled when the sentence ends (ClaudeCLIBrain.respond).
 
-    private var earlyDone = 0
-    private var earlyBlocked = false
+    /// Per command (its first word's index): true = already ran here, false = not local (left for Claude).
+    private var earlyStatus: [Int: Bool] = [:]
     private(set) var earlyReplies: [String] = []
 
     private func runEarlyClauses(_ text: String) {
-        guard ClaudeVoiceBrain.isActive, !earlyBlocked else { return }
-        let cls = CloudLocalActions.clauses(text)
-        var ready = Array(cls.dropLast())
-        if let last = cls.last, CloudLocalActions.isSureEarly(last) { ready.append(last) }
-        while earlyDone < ready.count {
-            guard let r = CloudLocalActions.handle(ready[earlyDone]) else { earlyBlocked = true; return }
-            appendAppLog("nb.log", "[Voice] early: \(ready[earlyDone])")
-            earlyReplies.append(r)
-            earlyDone += 1
-            NotificationCenter.default.post(name: .triggerEmote, object: BotEmote.happy)
+        guard ClaudeVoiceBrain.isActive else { return }
+        let cmds = CloudLocalActions.commandsWithStart(text)
+        // A command is complete when the next one has started, or when it can only mean one thing.
+        for (i, cmd) in cmds.enumerated() where earlyStatus[cmd.start] == nil {
+            let c = cmd.text
+            let complete = i < cmds.count - 1 || CloudLocalActions.isSureEarly(c)
+            guard complete else { break }
+            if let r = CloudLocalActions.handle(c) {
+                earlyStatus[cmd.start] = true
+                earlyReplies.append(r)
+                appendAppLog("nb.log", "[Voice] early: \(c)")
+                NotificationCenter.default.post(name: .triggerEmote, object: BotEmote.happy)
+            } else {
+                earlyStatus[cmd.start] = false   // for Claude at the end; the next ones still run now
+            }
         }
     }
 
-    /// The requests already run during this sentence (count) and what Cloud said for them.
-    func takeEarly() -> (count: Int, replies: [String]) {
-        defer { earlyDone = 0; earlyBlocked = false; earlyReplies = [] }
-        return (earlyDone, earlyReplies)
+    /// What already ran during this sentence (per command index) and what Cloud said for it.
+    func takeEarly() -> (status: [Int: Bool], replies: [String]) {
+        defer { earlyStatus = [:]; earlyReplies = [] }
+        return (earlyStatus, earlyReplies)
     }
 
     private func endCommand(postFinished: Bool) {

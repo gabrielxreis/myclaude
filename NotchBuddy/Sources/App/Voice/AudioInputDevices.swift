@@ -26,15 +26,41 @@ enum AudioInputDevices {
         }
     }
 
-    /// Points the engine's input unit at the chosen microphone. No-op for the default.
+    /// Points the engine's input unit at the chosen microphone, or at the Mac's default input
+    /// ("Padrão do sistema"): the same engine is reused, so the default must be set explicitly,
+    /// or it kept the last microphone chosen until the app was reopened.
     static func apply(to audioUnit: AudioUnit?) {
+        guard let audioUnit else { return }
         let uid = selectedUID
-        guard !uid.isEmpty, let audioUnit,
-              var dev = allDeviceIDs().first(where: { string($0, kAudioDevicePropertyDeviceUID) == uid }) else { return }
+        var dev: AudioDeviceID
+        if !uid.isEmpty, let chosen = allDeviceIDs().first(where: { string($0, kAudioDevicePropertyDeviceUID) == uid }) {
+            dev = chosen
+        } else {
+            if !uid.isEmpty { appendAppLog("nb.log", "[Voice] microphone \(uid) not connected, using the Mac's default") }
+            guard let def = defaultInputID() else { return }
+            dev = def
+        }
         let status = AudioUnitSetProperty(audioUnit, kAudioOutputUnitProperty_CurrentDevice,
                                           kAudioUnitScope_Global, 0, &dev,
                                           UInt32(MemoryLayout<AudioDeviceID>.size))
-        appendAppLog("nb.log", "[Voice] microphone \(uid) → \(status == noErr ? "ok" : "error \(status)")")
+        appendAppLog("nb.log", "[Voice] microphone \(string(dev, kAudioObjectPropertyName) ?? "?") → \(status == noErr ? "ok" : "error \(status)")")
+    }
+
+    /// The chosen microphone is plugged in (or the default is used).
+    static var selectedIsConnected: Bool {
+        let uid = selectedUID
+        return uid.isEmpty || allDeviceIDs().contains { string($0, kAudioDevicePropertyDeviceUID) == uid }
+    }
+
+    private static func defaultInputID() -> AudioDeviceID? {
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                              mScope: kAudioObjectPropertyScopeGlobal,
+                                              mElement: kAudioObjectPropertyElementMain)
+        var id = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &id) == noErr,
+              id != 0 else { return nil }
+        return id
     }
 
     // MARK: CoreAudio

@@ -6,7 +6,7 @@ import AppKit
 // Checks the latest release of github.com/gabrielxreis/myclaude: when it is newer than this build
 // (Info.plist MyCloudBuildDate), it downloads the ready-made MyCloud.zip (no Xcode needed),
 // replaces /Applications/My Cloud.app and reopens it. Without a release, a Mac with Xcode builds
-// the source instead. The /ogab and /ojhon skills are updated the same day.
+// the source instead. Only the app: skills such as /ogab and /ojhon update on their own.
 // A build newer than GitHub (a development build) is never replaced by an older one.
 
 @MainActor
@@ -24,6 +24,9 @@ final class CloudUpdater: ObservableObject {
     static var lastCheck: Date? {
         get { UserDefaults.standard.object(forKey: "cloudLastUpdateCheck") as? Date }
         set { UserDefaults.standard.set(newValue, forKey: "cloudLastUpdateCheck") }
+    }
+    static var isPersonalBuild: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "MyCloudPersonal") as? Bool ?? false
     }
     static var buildDate: Date? {
         (Bundle.main.object(forInfoDictionaryKey: "MyCloudBuildDate") as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
@@ -47,7 +50,6 @@ final class CloudUpdater: ObservableObject {
     func check(manual: Bool) async {
         Self.lastCheck = Date()
         status = "Verificando…"
-        updateSkills()
         let release = await Self.latestRelease()
         var remoteDate = release?.date
         if remoteDate == nil { remoteDate = await Self.latestCommitDate() }
@@ -56,6 +58,15 @@ final class CloudUpdater: ObservableObject {
             return
         }
         let mine = Self.buildDate ?? .distantPast
+        // My own build from the private fork: the public release (no Mochi, no Coucou sounds)
+        // must not replace it. I update it with scripts/build-mycloud.sh.
+        if Self.isPersonalBuild {
+            status = remote > mine.addingTimeInterval(60)
+                ? "Build pessoal: tem versão pública mais nova, mas esta não é trocada (atualize com o build-mycloud.sh)."
+                : "Build pessoal, em dia."
+            appendAppLog("nb.log", "[Cloud] update: personal build, not replaced")
+            return
+        }
         guard remote > mine.addingTimeInterval(60) else {
             status = "Você está na versão mais nova."
             appendAppLog("nb.log", "[Cloud] update: up to date (remote \(remote), build \(mine))")
@@ -148,20 +159,6 @@ final class CloudUpdater: ObservableObject {
         p.arguments = ["/bin/zsh", path.path]
         p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
         try? p.run()
-    }
-
-    /// /ogab and /ojhon: a quiet git pull (their install.sh stays for the big updates).
-    private func updateSkills() {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        for skill in ["ogab", "ojhon"] {
-            let dir = "\(home)/.claude/skills/\(skill)"
-            guard FileManager.default.fileExists(atPath: dir + "/.git") else { continue }
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            p.arguments = ["-C", dir, "pull", "--ff-only", "-q"]
-            p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
-            try? p.run()
-        }
     }
 
     static func notify(_ text: String) {

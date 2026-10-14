@@ -161,7 +161,13 @@ struct OverviewView: View {
                 let hideJumpButton = showingN8nDetail || activeDiffId != nil
                 #endif
                 if !hideJumpButton {
-                    Button(action: { openAgentTarget(agent) }) {
+                    Button(action: {
+                        #if !APPSTORE
+                        CloudPetWindow.shared.show()   // My Cloud: the pet, big, to play with
+                        #else
+                        openAgentTarget(agent)
+                        #endif
+                    }) {
                         Image(systemName: "arrow.up.right")
                             .font(.system(size: 8, weight: .medium))
                             .foregroundColor(Color(hex: "#5F646D"))

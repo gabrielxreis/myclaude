@@ -6,6 +6,16 @@ struct IslandScreenGeometry {
     private static let noNotchWidth: CGFloat = 80
     private static let noNotchHeight: CGFloat = 24
 
+    /// My Cloud, Settings → Geral → Tela: the island's size on a screen without a notch
+    /// ("pequeno" keeps Coucou's 80×24 inside the menu bar; bigger ones hang a little below it).
+    static var noNotchSize: (width: CGFloat, height: CGFloat, fitsMenuBar: Bool) {
+        switch UserDefaults.standard.string(forKey: "cloudNoNotchSize") ?? "medio" {
+        case "pequeno": return (noNotchWidth, noNotchHeight, true)
+        case "grande":  return (150, 40, false)
+        default:        return (116, 32, false)
+        }
+    }
+
     let hasNotch: Bool
     let width: CGFloat
     let height: CGFloat
@@ -24,8 +34,9 @@ struct IslandScreenGeometry {
             }
             height = safeAreaTop
         } else {
-            width = Self.noNotchWidth
-            height = min(Self.noNotchHeight, menuBarHeight)
+            let size = Self.noNotchSize
+            width = size.width
+            height = size.fitsMenuBar ? min(size.height, menuBarHeight) : size.height
         }
     }
 }
@@ -34,8 +45,10 @@ struct IslandScreenGeometry {
 struct IslandRestingLayout {
     let width: CGFloat
     let height: CGFloat
+    /// The notch caps the character at 20 pt; without a notch the bigger sizes let it grow.
+    var maxBot: CGFloat = 20
 
-    var botDiameter: CGFloat { min(20, max(0, height - 6)) }
+    var botDiameter: CGFloat { min(maxBot, max(0, height - 6)) }
     var botCenterY: CGFloat { height / 2 }
     var miniGridScale: CGFloat { min(1, max(0, height - 4) / 28) }
     var miniGridCenterX: CGFloat { width - 40 }

@@ -609,13 +609,17 @@ final class HookServer: @unchecked Sendable {
                 break
             }
             state.updateTask(id: agentId, state: .finished)
-            if !finalText.isEmpty, let idx = state.tasks.firstIndex(where: { $0.id == agentId }) {
+            // My Cloud, Settings → Claude: how a finished task shows ("card", "pilula" or "nada").
+            let finishMode = UserDefaults.standard.string(forKey: "cloudFinishedDisplay") ?? "card"
+            if finishMode != "nada", !finalText.isEmpty, let idx = state.tasks.firstIndex(where: { $0.id == agentId }) {
                 state.tasks[idx].finalLine = finalText
             }
-            SoundEngine.shared.play("finish")
-            if focused {
+            if UserDefaults.standard.object(forKey: "cloudFinishedSound") as? Bool ?? true {
+                SoundEngine.shared.play("finish")
+            }
+            if focused && finishMode == "card" {
                 expandIfNeeded(to: .finished)
-            } else {
+            } else if finishMode != "nada" {
                 setPillBadge(id: agentId, badge: .finished)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.2) {

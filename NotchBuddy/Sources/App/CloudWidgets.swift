@@ -152,22 +152,117 @@ final class CloudWidgetData: ObservableObject {
 
 struct CloudWidgetsCard: View {
     @AppStorage("cloudWidgets") private var csv: String = CloudWidget.defaultCSV
+    @State private var page = 0
+    @State private var monitor: Any?
+    @State private var wheel: CGFloat = 0
+    @State private var wheelLockUntil = Date.distantPast
 
     var body: some View {
         let list = csv.split(separator: ",").compactMap { CloudWidget(rawValue: String($0)) }
         if list.count <= 1 && (list.first ?? .atalhos) == .atalhos {
             CloudQuickActionsRow()
         } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(list) { w in
-                        CloudWidgetTile(widget: w)
-                            .frame(width: w == .atalhos ? 196 : 132)
+            // Pages instead of a sideways scroll: a mouse wheel only scrolls up and down, and the
+            // shortcuts tile swallowed the gesture. Wheel (either way), swipe, arrows or dots.
+            GeometryReader { g in
+                let pages = Self.paginate(list, width: g.size.width - 16)
+                let current = min(page, pages.count - 1)
+                ZStack {
+                    HStack(spacing: 8) {
+                        ForEach(pages[current]) { w in
+                            CloudWidgetTile(widget: w).frame(maxWidth: .infinity)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+                    .padding(.bottom, pages.count > 1 ? 14 : 8)
+                    .id(current)
+                    .transition(.opacity)
+
+                    if pages.count > 1 {
+                        HStack {
+                            arrow("chevron.left", enabled: current > 0) { go(current - 1, pages.count) }
+                            Spacer()
+                            arrow("chevron.right", enabled: current < pages.count - 1) { go(current + 1, pages.count) }
+                        }
+                        .padding(.horizontal, 1)
+                        VStack {
+                            Spacer()
+                            HStack(spacing: 4) {
+                                ForEach(0..<pages.count, id: \.self) { i in
+                                    Circle().fill(Color.white.opacity(i == current ? 0.7 : 0.2)).frame(width: 4, height: 4)
+                                        .onTapGesture { go(i, pages.count) }
+                                }
+                            }
+                            .padding(.bottom, 5)
+                        }
                     }
                 }
-                .padding(8)
+                .onHover { inside in
+                    if inside { startWheel(pages.count) } else { stopWheel() }
+                }
+                .onChange(of: pages.count) { _, n in if page >= n { page = max(0, n - 1) } }
             }
+            .onDisappear { stopWheel() }
         }
+    }
+
+    /// Tiles in order, as many per page as fit (at least one).
+    static func paginate(_ list: [CloudWidget], width: CGFloat) -> [[CloudWidget]] {
+        var pages: [[CloudWidget]] = [[]]
+        var used: CGFloat = 0
+        for w in list {
+            let need: CGFloat = (w == .atalhos ? 196 : 124) + (pages[pages.count - 1].isEmpty ? 0 : 8)
+            if !pages[pages.count - 1].isEmpty && used + need > width {
+                pages.append([]); used = 0
+            }
+            used += pages[pages.count - 1].isEmpty ? (w == .atalhos ? CGFloat(196) : CGFloat(124)) : need
+            pages[pages.count - 1].append(w)
+        }
+        return pages
+    }
+
+    private func arrow(_ icon: String, enabled: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 9, weight: .bold))
+                .foregroundColor(Color.white.opacity(enabled ? 0.7 : 0.15))
+                .frame(width: 14, height: 28)
+                .background(Capsule().fill(Color.black.opacity(enabled ? 0.55 : 0)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    private func go(_ p: Int, _ count: Int) {
+        let target = max(0, min(count - 1, p))
+        guard target != page else { return }
+        withAnimation(.easeInOut(duration: 0.18)) { page = target }
+        SoundEngine.shared.play("hover")
+    }
+
+    /// While the pointer is over the card, the wheel or a two-finger swipe turns the page.
+    private func startWheel(_ count: Int) {
+        stopWheel()
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { e in
+            let d = abs(e.scrollingDeltaX) > abs(e.scrollingDeltaY) ? -e.scrollingDeltaX : -e.scrollingDeltaY
+            MainActor.assumeIsolated {
+                guard Date() > wheelLockUntil else { return }
+                wheel += e.hasPreciseScrollingDeltas ? d : d * 12
+                if abs(wheel) > 40 {
+                    go(page + (wheel > 0 ? 1 : -1), count)
+                    wheel = 0
+                    wheelLockUntil = Date().addingTimeInterval(0.4)
+                }
+            }
+            return e
+        }
+    }
+
+    private func stopWheel() {
+        if let m = monitor { NSEvent.removeMonitor(m) }
+        monitor = nil
+        wheel = 0
     }
 }
 

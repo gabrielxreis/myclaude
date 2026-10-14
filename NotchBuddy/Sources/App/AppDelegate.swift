@@ -15,6 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         DemoEngine.shared.stop()
         HotKeyCenter.shared.unregisterAll()
+        #if !APPSTORE
+        ScreenTools.shared.stopRecordingOnQuit()   // a screen recording must not outlive the app
+        #endif
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -30,6 +33,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = CloudTimers.shared        // saved timers and reminders ring even after a restart
         _ = RoutineStore.shared       // routines run at their time
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { CloudOnboardingWindow.shared.showIfNeeded() }   // the egg, once
+        // Settings → Claude: read the Claude integration; if something is missing, open that tab once.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            if CloudIdentity.hatched { ClaudeConnection.shared.checkAtLaunch() }
+            CloudFirstSetup.runIfNeeded()   // every permission at once, the first time
+            // After an update: happy, and "Quer ver o que eu sei fazer de novo?"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { CloudChangelog.shared.announceIfNeeded() }
+            logPermissions()
+        }
         #endif
         #if DEBUG
         let debugMenu = NSMenu(title: "Debug")
@@ -120,6 +131,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         win.contentView = host
         win.contentMinSize = NSSize(width: 640, height: 420)
         win.isReleasedWhenClosed = false
+        #if !APPSTORE
+        // Opens on the Space I am on, even over a full-screen app (else it seemed not to open).
+        win.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        #endif
         placeBelowIsland(win)
         settingsWindow = win
         win.makeKeyAndOrderFront(nil)

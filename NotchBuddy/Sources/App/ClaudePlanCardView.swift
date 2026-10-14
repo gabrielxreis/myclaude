@@ -3,6 +3,12 @@ import SwiftUI
 // MARK: - Claude Plan Card View
 
 struct ClaudePlanCardView: View {
+    /// Room for the character on the left. My Cloud's characters are wider than Mochi.
+    #if !APPSTORE
+    static let textLeading: CGFloat = 122
+    #else
+    static let textLeading: CGFloat = 108
+    #endif
     let usage: PlanUsage?   // nil = installed, no data yet
     #if !APPSTORE
     /// Claude and Codex both shown: Codex is a third row (the header has room for one pill).
@@ -31,7 +37,7 @@ struct ClaudePlanCardView: View {
                     .fixedSize()
             }
             .padding(.top, 6)
-            .padding(.leading, 108)
+            .padding(.leading, Self.textLeading)
             .padding(.trailing, 36)
 
             // Gauge rows
@@ -52,7 +58,7 @@ struct ClaudePlanCardView: View {
                 #endif
             }
             .padding(.top, 8)
-            .padding(.leading, 108)
+            .padding(.leading, Self.textLeading)
             .padding(.trailing, 12)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

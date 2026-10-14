@@ -120,11 +120,15 @@ final class CloudQuickActions: ObservableObject {
         reload()
     }
 
-    /// My Cloud ships with /ogab and /ojhon pinned (once each; the user may remove them).
+    /// /ogab and /ojhon get pinned once each, only when the skill is installed (My Cloud doesn't
+    /// install them); the user may remove them. Checked again at each launch until installed.
     private func pinOgabOnce() {
+        let skills = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/skills")
         for (skill, icon) in [("ogab", "film"), ("ojhon", "chart.line.uptrend.xyaxis")] {
             let key = skill == "ogab" ? "myCloudOgabPinned" : "myCloudOjhonPinned"
-            guard !UserDefaults.standard.bool(forKey: key) else { continue }
+            guard !UserDefaults.standard.bool(forKey: key),
+                  FileManager.default.fileExists(atPath: skills.appendingPathComponent(skill).appendingPathComponent("SKILL.md").path)
+            else { continue }
             UserDefaults.standard.set(true, forKey: key)
             if !actions.contains(where: { $0.skill == skill }) {
                 write(actions + [CloudQuickAction(titulo: "/" + skill, icone: icon, skill: skill)])

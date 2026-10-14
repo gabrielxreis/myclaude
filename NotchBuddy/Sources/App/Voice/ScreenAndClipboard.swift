@@ -44,6 +44,8 @@ final class ScreenTools: ObservableObject {
             return ("Não consegui ver a tela. Libere o My Cloud em Ajustes do Sistema, Privacidade, Gravação de Tela.", nil)
         }
         CloudMissions.shared.record(.tela)
+        // The screenshot is only for Claude to read: gone after 10 minutes (it may show private things).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 600) { try? FileManager.default.removeItem(atPath: path) }
         return ("Deixa eu ver…",
                 "[tela] Leia a imagem da tela do usuário em \(path) com a ferramenta Read e responda ao que ele perguntou: \"\(question)\". Se for um erro, diga o que significa e como resolver, em passos curtos.")
     }
@@ -51,11 +53,15 @@ final class ScreenTools: ObservableObject {
     // MARK: Recording the screen
 
     static func isRecordRequest(_ n: String) -> Bool {
-        (n.contains("grava") || n.contains("gravar") || n.contains("gravacao")) && n.contains("tela")
+        let aboutRecording = n.contains("grava") || n.contains("gravar") || n.contains("gravacao")
+        // While recording, "para de gravar" (no "tela") must reach it too: it's what Cloud tells me to say.
+        return aboutRecording && (n.contains("tela") || shared.recorder != nil)
     }
 
     func record(_ n: String) -> String {
-        let stop = ["para ", "parar", "pare", "termina", "terminar", "encerra", "finaliza"].contains { n.contains($0) }
+        // "grava a tela para mim" starts; only an explicit stop stops.
+        let stop = ["para de gravar", "parar de gravar", "pare de gravar", "para a gravacao", "parar a gravacao",
+                    "termina", "terminar", "encerra", "finaliza", "stop"].contains { n.contains($0) }
         if stop {
             guard let rec = recorder, let url = recordingURL else { return "Não estou gravando a tela." }
             rec.interrupt()          // screencapture -v stops and writes the movie on SIGINT
@@ -78,6 +84,12 @@ final class ScreenTools: ObservableObject {
         CloudMissions.shared.record(.tela)
         appendAppLog("nb.log", "[Cloud] screen recording start \(url.path)")
         return "Gravando a tela. Diz \"para de gravar\" quando terminar."
+    }
+
+    func stopRecordingOnQuit() {
+        guard let rec = recorder else { return }
+        rec.interrupt()   // screencapture writes the movie on SIGINT
+        recorder = nil; recordingSince = nil
     }
 
     // MARK: Clipboard
@@ -130,7 +142,7 @@ final class ScreenTools: ObservableObject {
 
     func translatePage() -> String {
         guard let (url, _) = VideoIdea.currentBrowserPage(),
-              let enc = url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let enc = CloudLocalActions.queryEncoded(url),
               let t = URL(string: "https://translate.google.com/translate?sl=auto&tl=pt&u=\(enc)") else {
             return "Não achei a página: abre ela no navegador e me pede de novo."
         }

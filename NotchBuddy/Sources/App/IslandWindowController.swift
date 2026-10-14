@@ -411,6 +411,16 @@ final class IslandWindowController: NSWindowController {
                         // No answer to Coucou's question: stop listening.
                         self.closeVoiceTurn()
                     } else {
+                        #if !APPSTORE
+                        // Called but nothing understood: a puzzled face, "Não entendi, pode
+                        // repetir?", and it listens once more (only once: no loop).
+                        if !self.retriedAfterNotUnderstood {
+                            self.retriedAfterNotUnderstood = true
+                            self.showNotUnderstood()
+                            return
+                        }
+                        self.retriedAfterNotUnderstood = false
+                        #endif
                         self.fsm.voiceFinished()
                     }
                 } else {
@@ -893,6 +903,12 @@ final class IslandWindowController: NSWindowController {
         }
 
         // Hook server expand requests (alerts only)
+        #if !APPSTORE
+        // My Cloud: a window opened from the island (Cloud's own window) folds it away.
+        NotificationCenter.default.addObserver(forName: .collapseIsland, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.collapse() }
+        }
+        #endif
         NotificationCenter.default.addObserver(forName: .hookExpand, object: nil, queue: .main) { [weak self] note in
             guard let self, let view = note.object as? IslandView else { return }
             self.fsm.openedExternally()
@@ -970,6 +986,13 @@ final class IslandWindowController: NSWindowController {
                 // Notch Mochi is invisible when on desktop — no drag, no slap
                 guard !self.state.mochiOnDesktop else { return }
                 self.attachDragStart = NSEvent.mouseLocation
+                #if !APPSTORE
+                // Cloud's characters react to every click, closed or open.
+                if CloudCharacterKind.current != .mochi {
+                    NotificationCenter.default.post(name: .cloudPoke, object: nil)
+                    return
+                }
+                #endif
                 // Post slap only when expanded
                 guard self.state.mode == .expanded else { return }
                 NotificationCenter.default.post(name: .triggerSlap, object: nil)
@@ -1064,6 +1087,14 @@ final class IslandWindowController: NSWindowController {
             MainActor.assumeIsolated {
                 guard self.wasInIsland, self.isBotHit(event.locationInWindow) else { return }
                 guard !self.state.mochiOnDesktop else { return }
+                #if !APPSTORE
+                // Cloud's characters: a menu with the skins and the characters.
+                if CloudCharacterKind.current != .mochi {
+                    // Outside the event monitor: a menu opened inside it never delivers the click.
+                    DispatchQueue.main.async { CloudContextMenu.shared.show() }
+                    return
+                }
+                #endif
                 if self.state.mode == .expanded && self.state.view == .wardrobe {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         self.state.view = .overview
@@ -1489,11 +1520,33 @@ struct GhostBotView: View {
 // MARK: - Voice command handling
 
 #if !APPSTORE
+/// "Não entendi, pode repetir?" was already asked for this call (one retry, no loop).
+@MainActor private var notUnderstoodRetried = false
+
 extension IslandWindowController {
+
+    var retriedAfterNotUnderstood: Bool {
+        get { notUnderstoodRetried }
+        set { notUnderstoodRetried = newValue }
+    }
+
+    func showNotUnderstood() {
+        CloudExpression.shared.puzzle(for: 3.5)
+        let screen = IslandWindowController.islandScreen()
+        VoiceCaptionManager.shared.show(on: screen, notchHeight: AppState.shared.notchHeight)
+        VoiceCaptionManager.shared.clearResponse()
+        VoiceCaptionManager.shared.appendResponse("Não entendi, pode repetir?")
+        SoundEngine.shared.play("question")
+        appendAppLog("nb.log", "[Voice] not understood, asking to repeat")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            VoiceEngine.shared.startListeningDirectly(firstWordTimeout: 6)
+        }
+    }
 
     /// Run the intent derived from `transcript`, show VoiceResultView, then continue conversation or collapse.
     @MainActor
     func handleVoiceCommand(_ transcript: String) async {
+        retriedAfterNotUnderstood = false
         let t0     = Date()
         let pills  = PillCatalog.available
         let runner = VoiceActionRunner.shared

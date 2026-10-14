@@ -14,8 +14,15 @@ import Foundation
 final class ClaudeCLIBrain {
     static let shared = ClaudeCLIBrain()
 
-    /// Fast model for spoken answers; the chat window gets the default model.
-    static let voiceModel = "haiku"
+    /// Settings → Assistente: model for spoken answers (Haiku by default, the fastest).
+    static var voiceModel: String { UserDefaults.standard.string(forKey: "cloudVoiceModel").flatMap { $0.isEmpty ? nil : $0 } ?? "haiku" }
+    /// Settings → Assistente: model for the chat window; nil keeps Claude Code's default.
+    static var chatModel: String? { UserDefaults.standard.string(forKey: "cloudChatModel").flatMap { $0.isEmpty ? nil : $0 } }
+    /// Settings → Assistente: how long a spoken question may wait (actions get at least 5 min).
+    static var voiceTimeout: TimeInterval {
+        let v = UserDefaults.standard.double(forKey: "cloudVoiceTimeout")
+        return v > 0 ? v : 90
+    }
 
     /// Read-only for now: nothing is edited, run or sent.
     static let allowedTools = ["Read", "Glob", "Grep", "WebSearch", "WebFetch"]
@@ -47,7 +54,20 @@ final class ClaudeCLIBrain {
 
     /// A spoken turn, recorded in the current voice conversation.
     func respond(to transcript: String) async -> ClaudeVoiceBrain.Reply? {
-        guard !busy, Self.isAvailable else { return nil }
+        guard Self.isAvailable else { return nil }
+        // Claude still on the last request: what runs here (apps, sites, clicks, keys) runs now
+        // anyway; only a part that needs Claude waits. Dropping the whole command made Cloud
+        // look deaf while it was busy.
+        if busy {
+            let early = VoiceEngine.shared.takeEarly()
+            let local = CloudLocalActions.process(transcript, early: early.status)
+            let done = early.replies + local.replies
+            let text = local.rest == nil
+                ? (done.isEmpty ? "Pronto." : done.joined(separator: " "))
+                : (done + ["Ainda estou terminando o pedido anterior; me pede o resto daqui a pouco."]).joined(separator: " ")
+            appendAppLog("nb.log", "[Cloud] busy: ran locally \(done.count), rest \(local.rest == nil ? "none" : "waits")")
+            return ClaudeVoiceBrain.Reply(text: text, acted: !done.isEmpty, failed: false)
+        }
         busy = true
         defer { busy = false }
         let store = CloudChatStore.shared
@@ -57,7 +77,7 @@ final class ClaudeCLIBrain {
         // Local requests (open/quit an app, search) run here, instantly; some may already have
         // run while I was talking. Only what's left goes to Claude.
         let early = VoiceEngine.shared.takeEarly()
-        let local = CloudLocalActions.process(transcript, skip: early.count)
+        let local = CloudLocalActions.process(transcript, early: early.status)
         let done = early.replies + local.replies
         guard let rest = local.rest else {
             let text = done.isEmpty ? "Pronto." : done.joined(separator: " ")
@@ -85,21 +105,30 @@ final class ClaudeCLIBrain {
         var args = ["-p", prompt,
                     "--output-format", "json",
                     "--append-system-prompt", systemPrompt(voice: voice, mode: mode)]
-        if let m = model ?? (voice ? voiceModel : nil) { args += ["--model", m] }
+        if let m = model ?? (voice ? voiceModel : chatModel) { args += ["--model", m] }
         if let sessionId { args += ["--resume", sessionId] }
-        // Settings → Voz → "O que o Cloud pode fazer". The variadic --allowedTools goes last:
+        // Only the MCP tools Cloud uses (Peekaboo, when "usar qualquer app" is on): every MCP
+        // server of mine was loaded into each call (~35k tokens of tool descriptions). Skills,
+        // CLAUDE.md and settings stay as they are (/ogab and /ojhon need them).
+        let mcp = CloudComputerUse.active
+            ? #"{"mcpServers":{"peekaboo":{"command":"npx","args":["-y","@steipete/peekaboo","mcp"]}}}"#
+            : #"{"mcpServers":{}}"#
+        args += ["--strict-mcp-config", "--mcp-config", mcp]
+        // Settings → Assistente → "O que o Cloud pode fazer". The variadic --allowedTools goes last:
         // each rule is its own argument (rules may contain spaces).
+        let screen = CloudComputerUse.allowedTools(mode: mode)   // Peekaboo, when turned on
         switch mode {
         case "automatico":   // chosen by the user in Settings, with the warning shown there
             args += ["--permission-mode", "auto"]
+            if !screen.isEmpty { args += ["--allowedTools"] + screen }
         case "consultar":
-            args += ["--allowedTools"] + allowedTools + quickActionTools
+            args += ["--allowedTools"] + allowedTools + quickActionTools + screen
         default:
-            args += ["--allowedTools"] + VoiceSettings.allowedRules + quickActionTools
+            args += ["--allowedTools"] + VoiceSettings.allowedRules + quickActionTools + screen
         }
 
         let acting = mode != "consultar"
-        guard let data = await run(exe, args, timeout: timeout ?? (voice ? (acting ? 300 : 90) : 1800)),
+        guard let data = await run(exe, args, timeout: timeout ?? (voice ? (acting ? max(300, voiceTimeout) : voiceTimeout) : 1800)),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             appendAppLog("nb.log", "[Cloud] claude -p gave no JSON")
             return nil
@@ -166,7 +195,7 @@ final class ClaudeCLIBrain {
             Você executa no Mac do usuário, mas só com as ferramentas liberadas na lista de ações do \
             Cloud: faça a tarefa, não descreva como fazer. Se o pedido precisa de algo fora da lista \
             (a ferramenta for negada), diga em uma frase o que faltou e que dá para liberar em \
-            Ajustes → Voz → O que o Cloud pode fazer. Nunca apague nada, não publique e não envie \
+            Ajustes → Assistente → O que o Cloud pode fazer. Nunca apague nada, não publique e não envie \
             mensagem sem o usuário confirmar.
             """
         }
@@ -180,18 +209,20 @@ final class ClaudeCLIBrain {
         rápido, caloroso, um pouco brincalhão. Agora é \(today). Responda em português do Brasil, \
         sem travessão.
         \(modeRules(mode))
+        \(CloudComputerUse.promptRules)
         Nunca invente dados do usuário.
         Rotinas ficam em \(RoutineStore.file.path): array JSON de {"nome", "hora" (0-23), "minuto", \
         "dias" (1=domingo...7=sábado), "pedido"}. Gatilhos ficam em \(TriggerStore.file.path): array de \
         {"frase", "pedido"}. Quando pedirem "todo dia às 8h faz X" ou "quando eu disser Y faz Z", edite o arquivo \
         (mantenha o JSON válido) e confirme em uma frase.
         Vídeo: qualquer pedido de vídeo (criar, editar, DaVinci, reels, legenda, motion, roteiro) é \
-        trabalho da skill /ogab: use a skill. Anúncio, tráfego pago, campanha, Meta ou Google Ads, CPA, \
-        ROAS, criativo de anúncio ou relatório de campanha é trabalho da skill /ojhon: use a skill.
+        trabalho da skill /ogab, se ela estiver instalada em ~/.claude/skills: use a skill. Anúncio, \
+        tráfego pago, campanha, Meta ou Google Ads, CPA, ROAS, criativo de anúncio ou relatório de \
+        campanha é trabalho da skill /ojhon, se estiver instalada: use a skill.
         Ações rápidas: são botões no notch do usuário, guardados em \(CloudQuickActions.fileURL.path), \
         um array JSON de objetos {"titulo": curto, "pedido": o que você deve fazer quando ele tocar, \
         "icone": nome de SF Symbol}, ou um atalho de skill {"titulo": "/nome", "skill": "nome", \
-        "icone": "sparkles"} (as skills ficam em ~/.claude/skills). É o único arquivo que você pode editar. Quando o usuário pedir \
+        "icone": "sparkles"} (as skills ficam em ~/.claude/skills). Além das rotinas e dos gatilhos, é o único arquivo do Cloud que você pode editar. Quando o usuário pedir \
         para criar, mudar ou remover uma ação rápida, leia o arquivo, edite mantendo o JSON válido e \
         confirme em uma frase. O "pedido" é reutilizado em outros dias: nunca coloque data, dia da \
         semana ou horário fixos nele (escreva "hoje", "agora").

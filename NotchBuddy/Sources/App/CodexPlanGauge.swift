@@ -154,7 +154,7 @@ struct CodexPlanCardView: View {
                     .fixedSize()
             }
             .padding(.top, 6)
-            .padding(.leading, 108)
+            .padding(.leading, ClaudePlanCardView.textLeading)
             .padding(.trailing, 36)
 
             // Gauge rows
@@ -176,7 +176,7 @@ struct CodexPlanCardView: View {
                 }
             }
             .padding(.top, 8)
-            .padding(.leading, 108)
+            .padding(.leading, ClaudePlanCardView.textLeading)
             .padding(.trailing, 12)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

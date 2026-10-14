@@ -49,6 +49,7 @@ final class CloudTimers: ObservableObject {
 
     private func tick() {
         let now = Date()
+        guard !items.isEmpty else { return }   // nothing running: no redraw every second
         let due = items.filter { $0.end <= now }
         guard !due.isEmpty else { objectWillChange.send(); return }
         items.removeAll { $0.end <= now }
@@ -86,7 +87,10 @@ final class CloudTimers: ObservableObject {
         if n.contains("quanto falta") {
             return nextLine.map { "Falta: \($0)." } ?? "Não tem nenhum timer rodando."
         }
-        if ["cancela", "cancelar", "para o", "desliga"].contains(where: { n.contains($0) }) {
+        // Explicit only: "timer de 40 minutos para o bolo" is a new timer, not "para o timer".
+        let stops = ["cancela", "cancelar", "para o timer", "parar o timer", "pare o timer", "para o lembrete",
+                     "desliga o timer", "desligar o timer", "apaga o timer", "apaga o lembrete"]
+        if stops.contains(where: { n.contains($0) }) {
             let wasReminder = n.contains("lembrete")
             let before = items.count
             if let i = items.indices.filter({ items[$0].isReminder == wasReminder }).min(by: { items[$0].end < items[$1].end }) {
@@ -155,7 +159,8 @@ final class CloudTimers: ObservableObject {
         var c = Calendar.current.dateComponents([.year, .month, .day], from: Date())
         c.hour = h; c.minute = m
         guard var d = Calendar.current.date(from: c) else { return nil }
-        if d < Date() { d = d.addingTimeInterval(86400) }
+        if n.contains("amanha") { d = Calendar.current.date(byAdding: .day, value: 1, to: d) ?? d }
+        else if d < Date() { d = Calendar.current.date(byAdding: .day, value: 1, to: d) ?? d }
         return d
     }
 

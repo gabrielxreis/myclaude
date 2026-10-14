@@ -101,7 +101,7 @@ enum CloudSkin: String, CaseIterable, Identifiable {
     }
 }
 
-enum CloudFace: Equatable { case parado, ouvindo, pensando, falando, feliz, focado, sono, carente, surpreso, tonto }
+enum CloudFace: Equatable { case parado, ouvindo, pensando, falando, feliz, focado, sono, carente, surpreso, tonto, duvida }
 
 // MARK: - Painter
 
@@ -145,6 +145,8 @@ struct CloudPainter {
         case .carente: f.gx = -0.2; f.gy = 0.7; f.wide = 1.2; f.mouth = .sad; tilt = -0.06; f.blush = 0.75
         case .surpreso: f.wide = 1.3; f.mouth = .o; f.gx = 0; f.gy = -0.1
         case .tonto: f.eyes = .spiral; f.mouth = .wobbly; tilt = sin(t * 7) * 0.1; oy += sin(t * 9) * 0.01 * s
+        // Didn't understand: head tilted, eyes up to the side, a crooked mouth and a "?" above.
+        case .duvida: f.gx = 0.55; f.gy = -0.5; f.wide = 1.1; f.mouth = .wobbly; tilt = 0.14 * min(faceT / 0.25, 1)
         }
         // Bolinho: no mouth at rest, only when it has something to say.
         if kind == .bolinho && face == .parado { f.mouth = .none }
@@ -198,6 +200,7 @@ struct CloudPainter {
         if kind == .camera && face == .ouvindo { rec(&fx, s) }
         if face == .sono { zzz(&fx, s) }
         if face == .pensando { dots(&fx, s) }
+        if face == .duvida { questionMark(&fx, s) }
         if face == .ouvindo { waves(&fx, s) }
         if cold && face != .sono { breath(&fx, s) }
         if hot { sweat(&fx, s) }
@@ -590,6 +593,16 @@ struct CloudPainter {
         }
     }
 
+    /// A "?" that pops above the head and bobs.
+    func questionMark(_ c: inout GraphicsContext, _ s: Double) {
+        let pop = min(faceT / 0.2, 1)
+        var q = c
+        q.opacity = pop
+        let y = -0.62 * s + sin(t * 3) * 0.03 * s
+        q.draw(Text("?").font(.system(size: 0.42 * s * pop, weight: .heavy, design: .rounded)).foregroundColor(.white),
+               at: CGPoint(x: 0.42 * s, y: y))
+    }
+
     func dots(_ c: inout GraphicsContext, _ s: Double) {
         for i in 0..<3 {
             let a = 0.35 + 0.65 * max(0, sin(t * 4 - Double(i) * 0.7))
@@ -657,9 +670,15 @@ struct CloudPainter {
         case .carente: names = ["carente", "triste"]
         case .surpreso: names = ["surpreso", "ouvindo"]
         case .tonto: names = ["tonto", "surpreso"]
+        case .duvida: names = ["duvida", "surpreso", "pensando"]
         case .parado: names = []
         }
-        guard let img = CloudImportedPacks.image(names + ["parado"]) else {
+        // Optional animation frames next to each mood: -piscar (blink), -boca (talking), -mexe (idle tail/ears).
+        var variant: String?
+        if blinking && face != .sono { variant = "piscar" }
+        else if face == .falando && sin(t * 14) > 0 { variant = "boca" }
+        else if face != .sono && Int(t / 0.7) % 2 == 1 { variant = "mexe" }
+        guard let img = CloudImportedPacks.image(names + ["parado"], variant: variant) else {
             var p = Path(); p.addRoundedRect(in: CGRect(x: -0.4 * s, y: -0.4 * s, width: 0.8 * s, height: 0.8 * s), cornerSize: CGSize(width: 20, height: 20))
             c.stroke(p, with: .color(.white.opacity(0.3)), style: StrokeStyle(lineWidth: 2, dash: [6, 6]))
             return

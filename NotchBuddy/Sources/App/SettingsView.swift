@@ -136,7 +136,22 @@ struct SettingsView: View {
     @State private var connectedScreens: [(uuid: String, name: String)] = []
 
     // Sidebar selection persisted across sessions
-    @AppStorage("settingsSection") private var selectedSection: String = "general"
+    @AppStorage("settingsSection") private var selectedSection: String = "claude"
+    #if !APPSTORE
+    @AppStorage("cloudVoiceModel") private var voiceModel: String = "haiku"
+    @AppStorage("cloudChatModel") private var chatModel: String = ""
+    @AppStorage("cloudVoiceTimeout") private var voiceTimeout: Double = 90
+    @ObservedObject private var claude = ClaudeConnection.shared
+    @State private var claudeAutoRead = ClaudeConnection.autoRead
+    @State private var dataMessage = ""
+    @AppStorage("cloudNoNotchSize") private var noNotchSize: String = "medio"
+    @AppStorage("cloudFinishedDisplay") private var finishedDisplay: String = "card"
+    @AppStorage("cloudFinishedSound") private var finishedSound: Bool = true
+    @AppStorage("cloudComputerUse") private var computerUse: Bool = false
+    @State private var petName: String = CloudIdentity.name
+    @StateObject private var trainer = NameTrainer()
+    @State private var computerUseMessage = ""
+    #endif
     // Active pills: the pill whose colour palette is open, if any
     @State private var colorPalettePill: String? = nil
     #if PHONE_LINK
@@ -165,7 +180,7 @@ struct SettingsView: View {
                             .resizable()
                             .frame(width: 32, height: 32)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("Coucou")
+                            Text("My Cloud")
                                 .font(.system(size: 13, weight: .semibold))
                             Text(appVersion)
                                 .font(.system(size: 11))
@@ -180,13 +195,22 @@ struct SettingsView: View {
                         get: { Optional(selectedSection) },
                         set: { if let v = $0 { selectedSection = v; statusMessage = "" } }
                     )) {
-                        SettingsSidebarRow(title: "General",      icon: "gearshape.fill",                    color: "#8E939C").tag("general")
-                        SettingsSidebarRow(title: "Active pills", icon: "square.grid.2x2.fill",              color: "#F5A524").tag("activepills")
-                        SettingsSidebarRow(title: "Agents",       icon: "terminal.fill",                     color: "#3B9EFF").tag("agents")
                         #if !APPSTORE
-                        SettingsSidebarRow(title: "Voice",        icon: "mic.fill",                          color: "#F97316").tag("voice")
+                        SettingsSidebarRow(title: "Claude",       icon: "sparkles",                          color: "#D97757").tag("claude")
                         #endif
-                        SettingsSidebarRow(title: "Shortcuts",    icon: "keyboard.fill",                     color: "#6366F1").tag("shortcuts")
+                        SettingsSidebarRow(title: "Geral",        icon: "gearshape.fill",                    color: "#8E939C").tag("general")
+                        #if !APPSTORE
+                        SettingsSidebarRow(title: "Personagem",   icon: "face.smiling.fill",                 color: "#EC4899").tag("personagem")
+                        SettingsSidebarRow(title: "Assistente",   icon: "wand.and.stars",                    color: "#8B5CF6").tag("assistente")
+                        SettingsSidebarRow(title: "Voz e microfone", icon: "mic.fill",                       color: "#F97316").tag("voice")
+                        #endif
+                        SettingsSidebarRow(title: "Pílulas",      icon: "square.grid.2x2.fill",              color: "#F5A524").tag("activepills")
+                        SettingsSidebarRow(title: "Agentes",      icon: "terminal.fill",                     color: "#3B9EFF").tag("agents")
+                        SettingsSidebarRow(title: "Atalhos",      icon: "keyboard.fill",                     color: "#6366F1").tag("shortcuts")
+                        #if !APPSTORE
+                        SettingsSidebarRow(title: "Permissões",   icon: "lock.shield.fill",                  color: "#0EA5E9").tag("permissoes")
+                        SettingsSidebarRow(title: "Dados",        icon: "externaldrive.fill",                color: "#10B981").tag("dados")
+                        #endif
                     }
                     .listStyle(.sidebar)
                     .scrollContentBackground(.hidden)
@@ -249,14 +273,19 @@ struct SettingsView: View {
 
     private var sectionTitle: String {
         switch selectedSection {
-        case "general":      return String(localized: "General")
-        case "activepills":  return String(localized: "Active pills")
-        case "agents":       return String(localized: "Agents")
+        case "claude":       return "Claude"
+        case "personagem":   return "Personagem"
+        case "assistente":   return "Assistente"
+        case "dados":        return "Dados e privacidade"
+        case "permissoes":   return "Permissões"
+        case "general":      return "Geral"
+        case "activepills":  return "Pílulas"
+        case "agents":       return "Agentes"
         case "chat":         return String(localized: "Chat")
         case "integrations": return String(localized: "Integrations")
-        case "voice":        return String(localized: "Voice")
-        case "shortcuts":    return String(localized: "Shortcuts")
-        default:             return String(localized: "General")
+        case "voice":        return "Voz e microfone"
+        case "shortcuts":    return "Atalhos"
+        default:             return "Geral"
         }
     }
 
@@ -265,7 +294,12 @@ struct SettingsView: View {
         case "activepills":  activePillsSection
         case "agents":       agentsSection
         #if !APPSTORE
-        case "voice":        voiceSection
+        case "voice":        micBox; voiceSection
+        case "claude":       claudeSection
+        case "personagem":   personagemSection
+        case "assistente":   assistenteSection
+        case "dados":        dadosSection
+        case "permissoes":   CloudPermissionsView()
         #endif
         case "shortcuts":    ShortcutsSettingsView()
         default:             generalSection
@@ -278,7 +312,7 @@ struct SettingsView: View {
         #if !APPSTORE
         GroupBox("Atualizações") {
             VStack(alignment: .leading, spacing: 8) {
-                Toggle("Atualizar sozinho todo dia (app, /ogab e /ojhon)", isOn: $autoUpdate)
+                Toggle("Atualizar o My Cloud sozinho todo dia", isOn: $autoUpdate)
                     .onChange(of: autoUpdate) { _, v in CloudUpdater.enabled = v }
                 HStack(spacing: 10) {
                     Button("Verificar agora") { Task { await CloudUpdater.shared.check(manual: true) } }
@@ -295,6 +329,401 @@ struct SettingsView: View {
             .padding(6)
         }
 
+        #endif
+
+        GroupBox(String(localized: "demo.groupbox.title")) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(String(localized: "demo.description"))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(demoEngine.isActive ? String(localized: "demo.stop") : String(localized: "demo.start")) {
+                    if demoEngine.isActive { DemoEngine.shared.stop() }
+                    else { DemoEngine.shared.start() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(6)
+        }
+
+        GroupBox("Comportamento") {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle("Abrir ao passar o mouse", isOn: $state.openOnHover)
+                    .help("Passar o mouse abre a ilha; ela fecha logo depois que o ponteiro sai. Clique dentro para manter aberta.")
+                HStack(spacing: 8) {
+                    Text("Fechar depois de")
+                    TextField("60", value: $state.autoCloseInterval, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 64)
+                    Text("s parado")
+                }
+                HStack(spacing: 8) {
+                    Text("Esconder depois de")
+                    TextField("3", value: absenceMinutes, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 48)
+                    Text("min sem mexer o mouse")
+                }
+            }
+            .padding(6)
+        }
+
+        GroupBox("Tela") {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("Mostrar o Cloud em", selection: $state.islandDisplay) {
+                    Text("Tela com notch (ou a principal, se não tiver)").tag(IslandDisplayChoice.notch)
+                    Text("Tela principal (barra de menus)").tag(IslandDisplayChoice.menuBar)
+                    Text("Seguir o mouse").tag(IslandDisplayChoice.followMouse)
+                    Divider()
+                    ForEach(connectedScreens, id: \.uuid) { screen in
+                        Text(screen.name).tag(IslandDisplayChoice.display(uuid: screen.uuid))
+                    }
+                    if case .display(let uuid) = state.islandDisplay,
+                       !connectedScreens.contains(where: { $0.uuid == uuid }) {
+                        Text("Tela salva (desconectada)").tag(state.islandDisplay)
+                    }
+                }
+                .frame(maxWidth: 360)
+                #if !APPSTORE
+                HStack(spacing: 10) {
+                    Text("Tamanho sem notch")
+                    Picker("Tamanho sem notch", selection: $noNotchSize) {
+                        Text("Pequeno (dentro da barra de menus)").tag("pequeno")
+                        Text("Médio").tag("medio")
+                        Text("Grande").tag("grande")
+                    }
+                    .labelsHidden().frame(maxWidth: 260)
+                    .onChange(of: noNotchSize) { _, _ in
+                        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+                    }
+                }
+                #endif
+                Text("Em Mac sem notch (MacBook Air antigo, iMac, monitor externo) o Cloud fica numa pílula no alto da tela. Pequeno cabe na barra de menus; Médio e Grande descem um pouco e deixam o personagem maior. Seguir o mouse leva o Cloud para a tela onde está o cursor enquanto ele está fechado.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(6)
+            .onAppear { refreshConnectedScreens() }
+            .onReceive(NotificationCenter.default.publisher(
+                for: NSApplication.didChangeScreenParametersNotification)) { _ in
+                refreshConnectedScreens()
+            }
+        }
+
+        GroupBox("Atalho de teclado") {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle("Abrir a ilha com um atalho", isOn: $state.hotkeyEnabled)
+                    .onChange(of: state.hotkeyEnabled) { _, _ in
+                        HotKeyCenter.shared.reregister(.toggleIsland)
+                    }
+                if state.hotkeyEnabled {
+                    HStack(spacing: 8) {
+                        Text("Atalho")
+                            .frame(width: 70, alignment: .leading)
+                        ShortcutRecorderButton(flags: $hotkeyFlags, code: $hotkeyCode)
+                            .onChange(of: hotkeyFlags) { _, v in
+                                state.hotkeyFlags = v
+                                HotKeyCenter.shared.reregister(.toggleIsland)
+                            }
+                            .onChange(of: hotkeyCode) { _, v in
+                                state.hotkeyCode = v
+                                HotKeyCenter.shared.reregister(.toggleIsland)
+                            }
+                        Text("aperte e a ilha abre")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(6)
+        }
+
+        GroupBox("Inicialização") {
+            Toggle("Abrir o My Cloud quando o Mac ligar", isOn: $launchAtStartup)
+                .onChange(of: launchAtStartup) { _, on in toggleStartup(on) }
+                .padding(6)
+        }
+
+        GroupBox(String(localized: "Weekly recap")) {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(String(localized: "Keep a history of my coding sessions"), isOn: $state.recapEnabled)
+                Text(String(localized: "Stored locally on your Mac. Nothing leaves your Mac. Retained for 12 weeks."))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(String(localized: "Hide project names in shared images"), isOn: $state.recapHideProjects)
+                    .disabled(!state.recapEnabled)
+                Button(String(localized: "Clear history")) { RecapStore.shared.clearHistory() }
+            }
+            .padding(6)
+        }
+
+        GroupBox(String(localized: "Language")) {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("", selection: $state.appLanguage) {
+                    Text(String(localized: "System")).tag("")
+                    Text("English").tag("en")
+                    Text("简体中文").tag("zh-Hans")
+                    Text("हिन्दी").tag("hi")
+                    Text("Español").tag("es")
+                    Text("العربية").tag("ar")
+                    Text("Français").tag("fr")
+                    Text("বাংলা").tag("bn")
+                    Text("Português (Brasil)").tag("pt-BR")
+                    Text("Русский").tag("ru")
+                    Text("Bahasa Indonesia").tag("id")
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .onChange(of: state.appLanguage) { _, code in
+                    if code.isEmpty {
+                        UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+                    } else {
+                        UserDefaults.standard.set([code], forKey: "AppleLanguages")
+                    }
+                    UserDefaults.standard.synchronize()
+                }
+                HStack(spacing: 8) {
+                    Button(String(localized: "Restart Coucou")) {
+                        let appPath = Bundle.main.bundleURL.path
+                        let pid = ProcessInfo.processInfo.processIdentifier
+                        let task = Process()
+                        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+                        task.arguments = ["-c", "while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done; open \"$1\"", "--", appPath]
+                        try? task.run()
+                        NSApp.terminate(nil)
+                    }
+                    .buttonStyle(.bordered)
+                    Text(String(localized: "Applies on next launch"))
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(6)
+        }
+
+        #if PHONE_LINK
+        GroupBox("iPhone") {
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle(String(localized: "iphone.sync.toggle"), isOn: $iPhoneSyncEnabled)
+                    .onChange(of: iPhoneSyncEnabled) { _, on in CloudProbe.shared.setEnabled(on) }
+                Text(String(localized: "iphone.sync.description"))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(String(localized: "iphone.live-activity.toggle"), isOn: $iPhoneLiveActivityEnabled)
+                    .disabled(!iPhoneSyncEnabled)
+                    .onChange(of: iPhoneLiveActivityEnabled) { _, on in LiveActivityRelay.shared.setEnabled(on) }
+                Text(String(localized: "iphone.live-activity.description"))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                #if !APPSTORE
+                Toggle(String(localized: "iphone.instruction.toggle"), isOn: $iPhoneInstructionsEnabled)
+                    .disabled(!iPhoneSyncEnabled)
+                    .onChange(of: iPhoneInstructionsEnabled) { _, on in InstructionRunner.shared.setEnabled(on) }
+                Text(String(localized: "iphone.instruction.description"))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                #endif
+            }
+            .padding(6)
+        }
+        #endif
+    }
+
+    #if !APPSTORE
+    // MARK: - My Cloud sections
+
+    // MARK: - Claude (connection)
+
+    private func statusRow(_ ok: Bool, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: ok ? "checkmark.circle.fill" : "circle.dashed")
+                .foregroundColor(ok ? .green : .secondary)
+            Text(title).frame(width: 170, alignment: .leading)
+            Text(detail).font(.system(size: 11)).foregroundColor(.secondary)
+                .lineLimit(1).truncationMode(.middle)
+        }
+    }
+
+    private var connectTitle: String {
+        switch claude.nextStep {
+        case .installCLI: return "Instalar o Claude Code"
+        case .login: return "Entrar na conta do Claude"
+        case .hooks: return "Conectar ao Claude"
+        case .statusLine: return "Mostrar o uso do plano"
+        case .done: return "Conectado"
+        }
+    }
+
+    private func connectNext() {
+        switch claude.nextStep {
+        case .installCLI:
+            claude.installCLI()
+            statusMessage = "Abri o Terminal com o instalador oficial do Claude Code. Quando terminar, clique em Verificar de novo."
+        case .login:
+            claude.login()
+            statusMessage = "Abri o Terminal para entrar na sua conta do Claude. Depois de entrar, clique em Verificar de novo."
+        case .hooks:
+            installHooks()
+        case .statusLine:
+            planTogglePending = true
+            installStatusLine()
+        case .done:
+            break
+        }
+    }
+
+    @ViewBuilder private var claudeSection: some View {
+        GroupBox("Conexão com o Claude") {
+            VStack(alignment: .leading, spacing: 10) {
+                statusRow(claude.cliPath != nil, "Claude Code instalado",
+                          claude.cliPath.map { "\(claude.version ?? "") · \($0)" } ?? "não encontrado")
+                statusRow(claude.loggedIn, "Conta conectada",
+                          claude.loggedIn ? [claude.email, claude.plan.map { "plano \($0)" }].compactMap { $0 }.joined(separator: " · ") : "sem login")
+                statusRow(claude.hooks, "Sessões no notch", claude.hooks ? "hooks no ~/.claude/settings.json" : "não conectado")
+                statusRow(claude.statusLine, "Uso do plano no notch", claude.statusLine ? "status line instalada" : "não instalado")
+                HStack(spacing: 10) {
+                    Button(connectTitle) { connectNext() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(claude.nextStep == .done || claude.checking)
+                    Button("Verificar de novo") { Task { await claude.refresh() } }
+                        .buttonStyle(.bordered)
+                        .disabled(claude.checking)
+                    if claude.checking { ProgressView().controlSize(.small) }
+                    else if let d = claude.lastCheck {
+                        Text("lido " + d.formatted(.relative(presentation: .named).locale(Locale(identifier: "pt_BR"))))
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                }
+                if showDiff {
+                    Text("O My Cloud vai acrescentar isto ao ~/.claude/settings.json (com backup datado). Confira e confirme:")
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                    ScrollView {
+                        Text(pendingHookJSON).font(.system(size: 10, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 120)
+                    .background(Color(NSColor.textBackgroundColor)).cornerRadius(6)
+                    HStack {
+                        Button("Confirmar e gravar") {
+                            confirmInstall()
+                            Task { await claude.refresh() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button("Cancelar") { showDiff = false; pendingHookJSON = "" }.buttonStyle(.bordered)
+                    }
+                }
+                if showStatusLineDiff {
+                    Text("Status line que mostra o uso do plano no notch. Confira e confirme:")
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                    ScrollView {
+                        Text(pendingStatusLineJSON).font(.system(size: 10, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 100)
+                    .background(Color(NSColor.textBackgroundColor)).cornerRadius(6)
+                    HStack {
+                        Button("Confirmar e gravar") {
+                            confirmStatusLine()
+                            Task { await claude.refresh() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button("Cancelar") {
+                            showStatusLineDiff = false; pendingStatusLineJSON = ""; planTogglePending = false
+                        }.buttonStyle(.bordered)
+                    }
+                }
+                Toggle("Ler a integração sozinho ao abrir o app", isOn: $claudeAutoRead)
+                    .onChange(of: claudeAutoRead) { _, v in ClaudeConnection.autoRead = v }
+                Text("O My Cloud usa o Claude Code no seu plano (Pro ou Max), sem API e sem créditos. Ao abrir, ele lê o que já está configurado; se faltar algo, abre esta tela uma vez. O botão faz o próximo passo que falta: instalar o Claude Code, entrar na conta, ligar as sessões ao notch e mostrar o uso do plano. Nada é gravado nos ajustes do Claude sem você ver e confirmar.")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(6)
+        }
+        .onAppear { Task { await claude.refresh() } }
+
+        GroupBox("Quando o Claude termina uma tarefa") {
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("Ao terminar", selection: $finishedDisplay) {
+                    Text("Abrir o notch com o resumo").tag("card")
+                    Text("Só marcar a pílula, sem abrir").tag("pilula")
+                    Text("Não mostrar nada").tag("nada")
+                }
+                .labelsHidden().pickerStyle(.radioGroup)
+                Toggle("Tocar o som de tarefa concluída", isOn: $finishedSound)
+                Text("Vale para as sessões do Claude Code (terminal, VS Code, app). Perguntas, permissões e erros continuam aparecendo no notch, porque precisam de você.")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(6)
+        }
+
+        GroupBox("Sessões do terminal") {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Responder perguntas e permissões das sessões do terminal no notch", isOn: $terminalCardsEnabled)
+                Text("Desligado: as sessões do Warp, Terminal, iTerm… aparecem no notch, mas as perguntas e permissões são feitas no terminal. Ligado: o notch mostra primeiro, e o terminal espera você responder (até 2 min).")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle("Mostrar o uso do plano do Claude no notch", isOn: Binding(
+                    get: { state.showPlanInNotch },
+                    set: { on in
+                        if on && !state.planRelayInstalled { planTogglePending = true; installStatusLine() }
+                        else { state.showPlanInNotch = on }
+                    }
+                ))
+            }
+            .padding(6)
+        }
+    }
+
+    // MARK: - Dados
+
+    @ViewBuilder private var dadosSection: some View {
+        GroupBox("Seus dados") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Conversas, ações rápidas, rotinas, gatilhos, timers, missões e personagens importados ficam só neste Mac, em ~/Library/Application Support/MyCloud. Nada vai para servidor nenhum além do Claude e do ChatGPT que você usa.")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Button("Abrir pasta de dados") {
+                        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                            .appendingPathComponent("MyCloud", isDirectory: true)
+                        NSWorkspace.shared.open(dir)
+                    }
+                    Button("Abrir log") {
+                        NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser
+                            .appendingPathComponent("Library/Logs/NotchBuddy", isDirectory: true))
+                    }
+                }
+                HStack(spacing: 10) {
+                    Button("Apagar histórico de conversas…") {
+                        let a = NSAlert()
+                        a.messageText = "Apagar todas as conversas?"
+                        a.informativeText = "O histórico do chat do Cloud vai para o Lixo. Rotinas, gatilhos e ações rápidas continuam."
+                        a.addButton(withTitle: "Apagar"); a.addButton(withTitle: "Cancelar")
+                        guard a.runModal() == .alertFirstButtonReturn else { return }
+                        CloudChatStore.shared.clearAll()
+                        dataMessage = "Conversas apagadas (estão no Lixo)."
+                    }
+                    Button("Ver as boas-vindas de novo") {
+                        CloudIdentity.resetOnboarding()
+                        dataMessage = "Na próxima vez que o app abrir, o ovo choca de novo."
+                    }
+                }
+                if !dataMessage.isEmpty {
+                    Text(dataMessage).font(.system(size: 11)).foregroundColor(.secondary)
+                }
+            }
+            .padding(6)
+        }
+    }
+
+    @ViewBuilder private var personagemSection: some View {
         GroupBox("Widgets do notch") {
             CloudWidgetsSettings().padding(6)
         }
@@ -356,29 +785,15 @@ struct SettingsView: View {
                     .font(.system(size: 11)).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Toggle("Sons ao começar e terminar de ouvir", isOn: $listenSounds)
-            }
-            .padding(6)
-        }
-        #endif
-
-        GroupBox(String(localized: "demo.groupbox.title")) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "demo.description"))
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                Text("Clique no personagem: ele leva um susto e pula (três cliques rápidos e ele fica tonto). Clique com o botão direito: menu para trocar a skin e o personagem.")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button(demoEngine.isActive ? String(localized: "demo.stop") : String(localized: "demo.start")) {
-                    if demoEngine.isActive { DemoEngine.shared.stop() }
-                    else { DemoEngine.shared.start() }
-                }
-                .buttonStyle(.borderedProminent)
             }
             .padding(6)
         }
-
-        GroupBox("Sound") {
+        GroupBox("Sons") {
             VStack(alignment: .leading, spacing: 10) {
-                Toggle("Enable sounds", isOn: $state.soundEnabled)
+                Toggle("Sons ligados", isOn: $state.soundEnabled)
                 HStack(spacing: 8) {
                     Text("Volume")
                         .frame(width: 56, alignment: .leading)
@@ -389,8 +804,8 @@ struct SettingsView: View {
                         .monospacedDigit()
                 }
                 HStack(spacing: 8) {
-                    Button("Open sounds folder") { SoundEngine.shared.revealCustomFolder() }
-                    Button("Reload sounds") {
+                    Button("Abrir pasta de sons") { SoundEngine.shared.revealCustomFolder() }
+                    Button("Recarregar sons") {
                         SoundEngine.shared.reload()
                         customSoundCount = SoundEngine.shared.customized.count
                         SoundEngine.shared.play("pop")
@@ -402,7 +817,7 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(!state.soundEnabled)
-                Text("Drop a file named like one of Mochi's sounds (finish.wav, approval.mp3, greet.m4a…) in the sounds folder to replace it, then Reload.")
+                Text("Para trocar um som, coloque na pasta um arquivo com o mesmo nome (finish.wav, approval.mp3, greet.m4a…) e clique em Recarregar.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -410,105 +825,9 @@ struct SettingsView: View {
             .padding(6)
         }
 
-        GroupBox("Behavior") {
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle("Open on hover", isOn: $state.openOnHover)
-                    .help("Hovering the island opens it; it folds again shortly after the pointer leaves. Click inside to keep it open.")
-                HStack(spacing: 8) {
-                    Text("Close after")
-                    TextField("60", value: $state.autoCloseInterval, format: .number)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 64)
-                    Text("s inactive")
-                }
-                HStack(spacing: 8) {
-                    Text("Hide after")
-                    TextField("3", value: absenceMinutes, format: .number)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 48)
-                    Text("min without movement")
-                }
-            }
-            .padding(6)
-        }
+    }
 
-        GroupBox("Display") {
-            VStack(alignment: .leading, spacing: 10) {
-                Picker("Show Mochi on", selection: $state.islandDisplay) {
-                    Text("Screen with the notch").tag(IslandDisplayChoice.notch)
-                    Text("Main screen (menu bar)").tag(IslandDisplayChoice.menuBar)
-                    Text("Follow the mouse").tag(IslandDisplayChoice.followMouse)
-                    Divider()
-                    ForEach(connectedScreens, id: \.uuid) { screen in
-                        Text(screen.name).tag(IslandDisplayChoice.display(uuid: screen.uuid))
-                    }
-                    if case .display(let uuid) = state.islandDisplay,
-                       !connectedScreens.contains(where: { $0.uuid == uuid }) {
-                        Text("Saved screen (not connected)").tag(state.islandDisplay)
-                    }
-                }
-                .frame(maxWidth: 360)
-                Text("On a screen without a notch, Mochi sits in a small bar at the top. Follow the mouse moves it to your cursor's screen while it is closed.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(6)
-            .onAppear { refreshConnectedScreens() }
-            .onReceive(NotificationCenter.default.publisher(
-                for: NSApplication.didChangeScreenParametersNotification)) { _ in
-                refreshConnectedScreens()
-            }
-        }
-
-        GroupBox("Hotkey") {
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle("Show island with shortcut", isOn: $state.hotkeyEnabled)
-                    .onChange(of: state.hotkeyEnabled) { _, _ in
-                        HotKeyCenter.shared.reregister(.toggleIsland)
-                    }
-                if state.hotkeyEnabled {
-                    HStack(spacing: 8) {
-                        Text("Shortcut")
-                            .frame(width: 70, alignment: .leading)
-                        ShortcutRecorderButton(flags: $hotkeyFlags, code: $hotkeyCode)
-                            .onChange(of: hotkeyFlags) { _, v in
-                                state.hotkeyFlags = v
-                                HotKeyCenter.shared.reregister(.toggleIsland)
-                            }
-                            .onChange(of: hotkeyCode) { _, v in
-                                state.hotkeyCode = v
-                                HotKeyCenter.shared.reregister(.toggleIsland)
-                            }
-                        Text("presses this → island opens")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-            .padding(6)
-        }
-
-        GroupBox("Startup") {
-            Toggle("Launch at Mac startup", isOn: $launchAtStartup)
-                .onChange(of: launchAtStartup) { _, on in toggleStartup(on) }
-                .padding(6)
-        }
-
-        GroupBox(String(localized: "Weekly recap")) {
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle(String(localized: "Keep a history of my coding sessions"), isOn: $state.recapEnabled)
-                Text(String(localized: "Stored locally on your Mac. Nothing leaves your Mac. Retained for 12 weeks."))
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Toggle(String(localized: "Hide project names in shared images"), isOn: $state.recapHideProjects)
-                    .disabled(!state.recapEnabled)
-                Button(String(localized: "Clear history")) { RecapStore.shared.clearHistory() }
-            }
-            .padding(6)
-        }
-
+    @ViewBuilder private var assistenteSection: some View {
         GroupBox("O que o Cloud pode fazer") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Abrir e fechar apps, pastas e sites, pesquisar no Google e abrir conversas do WhatsApp são sempre na hora, sem confirmar. Para o resto, o Cloud usa o Claude Code:")
@@ -595,19 +914,141 @@ struct SettingsView: View {
             .padding(6)
         }
 
-        GroupBox("Nome e microfone") {
+        GroupBox("Nome do seu assistente") {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     Text("Nome").frame(width: 130, alignment: .leading)
-                    TextField(WakePhrase.defaultNames, text: $wakeNames)
+                    TextField("Cloud", text: $petName)
                         .textFieldStyle(.roundedBorder)
-                        .onSubmit { VoiceSettings.wakeNames = wakeNames }
-                        .onChange(of: wakeNames) { _, v in VoiceSettings.wakeNames = v }
+                        .frame(maxWidth: 220)
+                        .onChange(of: petName) { _, v in
+                            let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !t.isEmpty { CloudIdentity.name = String(t.prefix(24)) }
+                        }
                 }
-                Text("Chame com Ei, Oi, OK ou Hey e um destes nomes, separados por vírgula. Coloque também como o Mac costuma escrever o nome quando você fala (ex.: Claudio para Cloud). Vazio volta ao padrão.")
+                let variants = WakePhrase.spellingVariants(petName)
+                if !variants.isEmpty {
+                    Text("Também entendo, sem você digitar: " + variants.joined(separator: ", ") + ", e outras com o mesmo som.")
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Para chamar: Ei, Hey, Oi, OK, Olá, Alô, Fala, Opa ou E aí + o nome. Ex.: \u{201C}Ei \(petName.isEmpty ? "Cloud" : petName), abre o Chrome\u{201D}. O nome também aparece no notch, no chat e na abertura.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Text("Outras grafias").frame(width: 130, alignment: .leading)
+                    TextField("opcional", text: $wakeNames)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: wakeNames) { _, v in VoiceSettings.wakeNames = v }
+                }
+                Text("Como o Mac às vezes escreve o nome quando você fala, separados por vírgula (para Cloud: Claudio, iCloud, Claud). Ajuda quando ele não acorda de primeira.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Divider()
+                HStack(spacing: 10) {
+                    Button(trainer.listening ? "Ouvindo…" : "Ensinar o nome") { trainer.record() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(trainer.listening)
+                    Text("Toque e diga \u{201C}Ei \(petName.isEmpty ? "Cloud" : petName)\u{201D}. Repita 2 ou 3 vezes.")
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                if !trainer.heard.isEmpty {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(Array(trainer.heard.enumerated()), id: \.offset) { _, h in
+                            Text("Ouvi: \u{201C}\(h)\u{201D}").font(.system(size: 11)).foregroundColor(.secondary)
+                        }
+                    }
+                    HStack(spacing: 10) {
+                        Text(trainer.learned.isEmpty ? "Ainda não achei o nome depois do \u{201C}Ei\u{201D}." :
+                             "Vou atender também por: " + trainer.learned.joined(separator: ", "))
+                            .font(.system(size: 11, weight: .semibold))
+                        Spacer()
+                        Button("Salvar") {
+                            trainer.save()
+                            wakeNames = VoiceSettings.wakeNames
+                            trainer.clear()
+                        }
+                        .disabled(trainer.learned.isEmpty)
+                        Button("Limpar") { trainer.clear() }
+                    }
+                }
+            }
+            .padding(6)
+        }
+
+        GroupBox("Usar qualquer app (Peekaboo)") {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Deixar o Cloud ver a tela e usar qualquer app", isOn: $computerUse)
+                    .onChange(of: computerUse) { _, v in
+                        CloudComputerUse.enabled = v
+                        if v && !CloudComputerUse.installed {
+                            computerUseMessage = "Instalando o Peekaboo no Claude Code…"
+                            Task {
+                                let err = await CloudComputerUse.install()
+                                computerUseMessage = err ?? "Pronto. Na primeira vez, o Mac pede Acessibilidade e Gravação de Tela para o My Cloud."
+                            }
+                        }
+                    }
+                HStack(spacing: 6) {
+                    Image(systemName: CloudComputerUse.installed ? "checkmark.circle.fill" : "circle.dashed")
+                        .foregroundColor(CloudComputerUse.installed ? .green : .secondary)
+                    Text(CloudComputerUse.installed ? "Peekaboo instalado no Claude Code" : "Peekaboo não instalado (instala sozinho ao ligar)")
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                if !computerUseMessage.isEmpty {
+                    Text(computerUseMessage).font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                Text("Com isso ligado, dá para pedir \u{201C}abre o Premiere e exporta a sequência\u{201D} ou \u{201C}no Finder, renomeia a pasta X\u{201D}: o Cloud olha a tela e vai clicando, digitando e usando os menus. No modo Só consultar ele só olha. Antes de apagar, enviar, publicar, comprar ou mudar ajustes do Mac, ele sempre pergunta. É mais lento que os comandos diretos, porque confere a tela a cada passo. Usa o Peekaboo (código aberto, MIT).")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(6)
+        }
+
+        GroupBox("Modelos do Claude") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Text("Respostas por voz").frame(width: 150, alignment: .leading)
+                    Picker("Voz", selection: $voiceModel) {
+                        Text("Haiku (mais rápido)").tag("haiku")
+                        Text("Sonnet").tag("sonnet")
+                        Text("Opus (mais capaz)").tag("opus")
+                    }
+                    .labelsHidden().frame(maxWidth: 220)
+                }
+                HStack(spacing: 10) {
+                    Text("Conversas no chat").frame(width: 150, alignment: .leading)
+                    Picker("Chat", selection: $chatModel) {
+                        Text("Padrão do Claude Code").tag("")
+                        Text("Haiku").tag("haiku")
+                        Text("Sonnet").tag("sonnet")
+                        Text("Opus").tag("opus")
+                    }
+                    .labelsHidden().frame(maxWidth: 220)
+                }
+                HStack(spacing: 10) {
+                    Text("Esperar a resposta por até").frame(width: 150, alignment: .leading)
+                    Picker("Tempo", selection: $voiceTimeout) {
+                        Text("1 min").tag(60.0)
+                        Text("1 min 30").tag(90.0)
+                        Text("3 min").tag(180.0)
+                        Text("5 min").tag(300.0)
+                    }
+                    .labelsHidden().frame(maxWidth: 220)
+                }
+                Text("Tudo roda no seu plano do Claude pelo Claude Code, sem API. Modelos maiores pensam melhor e gastam mais do limite do plano.")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(6)
+        }
+    }
+
+    private var micBox: some View {
+        GroupBox("Microfone") {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     Text("Microfone").frame(width: 130, alignment: .leading)
                     Picker("Microfone", selection: $micUID) {
@@ -621,85 +1062,24 @@ struct SettingsView: View {
                         VoiceEngine.shared.reloadLanguage()   // restarts listening on the new mic
                     }
                 }
+                if !AudioInputDevices.selectedIsConnected {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                        Text("O microfone escolhido está desconectado: o Cloud está usando o padrão do Mac.")
+                            .font(.system(size: 11)).foregroundColor(.orange)
+                    }
+                }
+                Text("Padrão do sistema segue o que estiver escolhido em Ajustes do Sistema, Som, Entrada. Escolha um dispositivo para o Cloud usar sempre aquele (ex.: microfone USB, AirPods), mesmo que o padrão do Mac mude.")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Atualizar lista") { micDevices = AudioInputDevices.list() }
+                    .buttonStyle(.bordered)
             }
             .padding(6)
             .onAppear { micDevices = AudioInputDevices.list() }
         }
-
-        GroupBox(String(localized: "Language")) {
-            VStack(alignment: .leading, spacing: 10) {
-                Picker("", selection: $state.appLanguage) {
-                    Text(String(localized: "System")).tag("")
-                    Text("English").tag("en")
-                    Text("简体中文").tag("zh-Hans")
-                    Text("हिन्दी").tag("hi")
-                    Text("Español").tag("es")
-                    Text("العربية").tag("ar")
-                    Text("Français").tag("fr")
-                    Text("বাংলা").tag("bn")
-                    Text("Português (Brasil)").tag("pt-BR")
-                    Text("Русский").tag("ru")
-                    Text("Bahasa Indonesia").tag("id")
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .onChange(of: state.appLanguage) { _, code in
-                    if code.isEmpty {
-                        UserDefaults.standard.removeObject(forKey: "AppleLanguages")
-                    } else {
-                        UserDefaults.standard.set([code], forKey: "AppleLanguages")
-                    }
-                    UserDefaults.standard.synchronize()
-                }
-                HStack(spacing: 8) {
-                    Button(String(localized: "Restart Coucou")) {
-                        let appPath = Bundle.main.bundleURL.path
-                        let pid = ProcessInfo.processInfo.processIdentifier
-                        let task = Process()
-                        task.executableURL = URL(fileURLWithPath: "/bin/sh")
-                        task.arguments = ["-c", "while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done; open \"$1\"", "--", appPath]
-                        try? task.run()
-                        NSApp.terminate(nil)
-                    }
-                    .buttonStyle(.bordered)
-                    Text(String(localized: "Applies on next launch"))
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(6)
-        }
-
-        #if PHONE_LINK
-        GroupBox("iPhone") {
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle(String(localized: "iphone.sync.toggle"), isOn: $iPhoneSyncEnabled)
-                    .onChange(of: iPhoneSyncEnabled) { _, on in CloudProbe.shared.setEnabled(on) }
-                Text(String(localized: "iphone.sync.description"))
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Toggle(String(localized: "iphone.live-activity.toggle"), isOn: $iPhoneLiveActivityEnabled)
-                    .disabled(!iPhoneSyncEnabled)
-                    .onChange(of: iPhoneLiveActivityEnabled) { _, on in LiveActivityRelay.shared.setEnabled(on) }
-                Text(String(localized: "iphone.live-activity.description"))
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                #if !APPSTORE
-                Toggle(String(localized: "iphone.instruction.toggle"), isOn: $iPhoneInstructionsEnabled)
-                    .disabled(!iPhoneSyncEnabled)
-                    .onChange(of: iPhoneInstructionsEnabled) { _, on in InstructionRunner.shared.setEnabled(on) }
-                Text(String(localized: "iphone.instruction.description"))
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                #endif
-            }
-            .padding(6)
-        }
-        #endif
     }
+    #endif
 
     private func refreshConnectedScreens() {
         connectedScreens = NSScreen.screens.compactMap { screen in

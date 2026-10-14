@@ -157,8 +157,14 @@ final class TriggerStore: ObservableObject {
     /// The request a phrase stands for, when it is one of my triggers.
     func expand(_ text: String) -> String? {
         reload()
-        let n = CloudTimers.norm(text).trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
-        return triggers.first { $0.ativo && !$0.frase.isEmpty && n.contains(CloudTimers.norm($0.frase)) }?.pedido
+        // Whole words only: the trigger "foco" must not fire on "focou" or "desfoco".
+        let words = { (s: String) in " " + CloudTimers.norm(s).components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }.joined(separator: " ") + " " }
+        let n = words(text)
+        return triggers.first { t in
+            let f = words(t.frase)
+            return t.ativo && f.count > 2 && n.contains(f)
+        }?.pedido
     }
 }
 
@@ -270,7 +276,7 @@ final class CloudMissions: ObservableObject {
         s.diasSeguidos = s.ultimoDia == yesterday ? s.diasSeguidos + 1 : 1
         s.ultimoDia = today
         s.dia = today
-        var rng = SeededRandom(seed: UInt64(abs(today.hashValue)))
+        var rng = SeededRandom(seed: UInt64(bitPattern: Int64(today.hashValue)))   // abs(Int.min) would crash
         s.missoes = Array(Self.pool.shuffled(using: &rng).prefix(3))
         state = s
     }
