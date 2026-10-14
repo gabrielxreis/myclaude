@@ -6,7 +6,7 @@
 #   scripts/publicar-release.sh            (from the personal fork)
 set -e
 FORK="$(cd "$(dirname "$0")/.." && pwd)"
-PUB="${MYCLOUD_PUBLIC_DIR:-$HOME/Documents/myclaude}"
+PUB="${MYCLOUD_PUBLIC_DIR:-$HOME/Documents/Claude Code/myclaude}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
